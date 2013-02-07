@@ -1,0 +1,13 @@
+#ifndef MESSAGE_HPP
+#define MESSAGE_HPP
+
+enum Message {
+  VOTE,
+  FOLLOWERINFO,
+  NEWLEADERINFO,
+  DIFF,
+  TRUNCATE,
+  ACKNEWLEADER
+};
+
+#endif
