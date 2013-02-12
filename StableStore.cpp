@@ -25,9 +25,8 @@ StableStore::applyDiff(const std::vector<Commit>& diff)
 void
 StableStore::add_proposal(const Proposal prop)
 {
-  if (zxid_ < prop.zxid()) {
-    zxid_ = prop.zxid();
-  }
+  zxid_ = prop.zxid();
+  log.insert(prop);
 }
 
 void

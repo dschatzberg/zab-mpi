@@ -3,33 +3,39 @@
 
 #include <cstdint>
 
-#include <map>
+#include "Message.pb.h"
 
-#include "PeerId.hpp"
-#include "QuorumPeer.hpp"
-#include "Vote.hpp"
-
-class QuorumPeer;
+class ReliableFifoCommunicator;
+class Log;
 
 class FastLeaderElection {
 public:
-  FastLeaderElection(QuorumPeer& self);
-  void lookForLeader();
-  void receiveVote(const Vote& v);
+  FastLeaderElection(ReliableFifoCommunicator& comm, Log& log,
+                     const std::string& id);
+  void LookForLeader();
 private:
-  typedef std::map<PeerId, Vote> VoteMap;
-  void addVote(const Vote& v);
-  bool updateVote(Vote& ours, const Vote& theirs);
-  bool haveQuorum(const Vote& v, const VoteMap& map);
-  bool checkLeader(PeerId leader, const VoteMap& map);
+  void SendVote();
 
-  QuorumPeer& self_;
-  Vote vote_;
-  //FIXME: Use c++11 unordered_map
-  VoteMap receivedVotes_;
-  VoteMap outOfElection_;
+  ReliableFifoCommunicator& comm_;
+  Log& log_;
+  const std::string& id_;
   uint32_t epoch_;
-  //TimeoutDesc timeout_;
+  Message::Vote vote_;
+//   void Receive(const Vote& v);
+// private:
+//   typedef std::map<PeerId, Vote> VoteMap;
+//   void addVote(const Vote& v);
+//   bool updateVote(Vote& ours, const Vote& theirs);
+//   bool haveQuorum(const Vote& v, const VoteMap& map);
+//   bool checkLeader(PeerId leader, const VoteMap& map);
+
+//   QuorumPeer& self_;
+//   Vote vote_;
+//   //FIXME: Use c++11 unordered_map
+//   VoteMap receivedVotes_;
+//   VoteMap outOfElection_;
+//   uint32_t epoch_;
+//   //TimeoutDesc timeout_;
 };
 
 #endif

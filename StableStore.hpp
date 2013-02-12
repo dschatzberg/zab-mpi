@@ -18,6 +18,6 @@ public:
 private:
   Zxid zxid_;
   Zxid committedZxid_;
+  std::set<Proposal> log;
+  std::set<Zxid> endif;
 };
-
-#endif

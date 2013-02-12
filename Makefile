@@ -1,49 +1,25 @@
 SRCFILES := \
-	AckNewLeader.cpp \
-	Commit.cpp \
-	CommitMsg.cpp \
-	FastLeaderElection.cpp \
-	Follower.cpp \
-	Leader.cpp \
-	NewLeaderInfo.cpp \
-	PeerId.cpp \
-	Proposal.cpp \
-	ProposalAck.cpp \
-	QuorumPeerPosix.cpp \
-	StableStore.cpp \
-	State.cpp \
-	test.cpp \
-	Trunc.cpp \
-	Vote.cpp \
-	Zxid.cpp
+	FastLeaderElection.cc \
+	Log.cc \
+	Message.pb.cc \
+	test.cc \
+	Zab.cc \
+	Zxid.cc
 HDRFILES := \
-	AckNewLeader.hpp \
-	Commit.hpp \
-	CommitMsg.hpp \
 	FastLeaderElection.hpp \
-	Follower.hpp \
-	Leader.hpp \
-	Message.hpp \
-	NewLeaderInfo.hpp \
-	PeerId.hpp \
-	Proposal.hpp \
-	ProposalAck.hpp \
-	QuorumPeer.hpp \
-	QuorumPeerPosix.hpp \
-	StableStore.hpp \
-	State.hpp \
-	Trunc.hpp \
-	Vote.hpp \
+	Log.hpp \
+	Message.pb.h \
+	Zab.hpp \
 	Zxid.hpp
 
-OBJFILES :=  $(patsubst %.cpp,%.o,$(SRCFILES))
+OBJFILES :=  $(patsubst %.cc,%.o,$(SRCFILES))
 
-DEPFILES := $(patsubst %.cpp, %.d, $(SRCFILES))
+DEPFILES := $(patsubst %.cc, %.d, $(SRCFILES))
 
 .PHONY: all clean
 
 CXXFLAGS := -g -std=gnu++0x -Wall -Werror
-LIBS := -lboost_system -lboost_thread -lpthread
+LIBS := -lboost_system -lboost_thread -lpthread -lprotobuf
 
 all: $(OBJECTS)
 
@@ -57,5 +33,5 @@ clean:
 
 -include $(DEPFILES)
 
-%.o: %.cpp Makefile
+%.o: %.cc Makefile
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@

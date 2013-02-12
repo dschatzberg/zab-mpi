@@ -46,6 +46,5 @@ private:
   uint32_t epoch_;
   uint32_t count_;
 };
-//typedef std::pair<uint32_t, uint32_t> Zxid;
 
 #endif
