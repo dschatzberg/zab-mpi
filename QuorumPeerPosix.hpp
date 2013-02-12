@@ -22,12 +22,16 @@ public:
   size_t getQuorumSize();
   State getState();
   void broadcast(const Vote& v);
+  void broadcast(const Proposal& v);
+  void broadcast(const CommitMsg& cm);
   void send(PeerId destination, const Vote& v);
   void send(PeerId destination, const Follower::Info& fi);
   void send(PeerId destination, const NewLeaderInfo& nli);
   void send(PeerId destination, const std::vector<Commit>& diff);
   void send(PeerId destination, const Trunc& trunc);
   void send(PeerId destination, const AckNewLeader& anl);
+  void send(PeerId destination, const ProposalAck& pa);
+  void ready();
 private:
   void handleReceive(const boost::system::error_code& error);
   const PeerId id_;

@@ -77,7 +77,8 @@ QuorumPeerPosix::getState()
 }
 
 void
-QuorumPeerPosix::broadcast(const Vote& v) {
+QuorumPeerPosix::broadcast(const Vote& v)
+{
   {
     boost::mutex::scoped_lock lock(mut);
     std::cout << id_ << ": Broadcasting: " << v << std::endl;
@@ -90,6 +91,50 @@ QuorumPeerPosix::broadcast(const Vote& v) {
     if (it->first != id_) {
       ssize_t ret = write(it->second, message, sizeof(Message) + sizeof(Vote));
       if (ret != sizeof(Message) + sizeof(Vote)) {
+        std::cerr << "write failed!" << std::endl;
+        throw;
+      }
+    }
+  }
+}
+
+void
+QuorumPeerPosix::broadcast(const Proposal& p)
+{
+  {
+    boost::mutex::scoped_lock lock(mut);
+    std::cout << id_ << ": Broadcasting: " << p << std::endl;
+  }
+  char message[sizeof(Message) + sizeof(Proposal)];
+  *reinterpret_cast<Message*>(message) = PROPOSAL;
+  *reinterpret_cast<Proposal*>(message+sizeof(Message)) = p;
+  for (std::map<PeerId, int>::iterator it = comm_.begin();
+       it != comm_.end(); it++) {
+    if (it->first != id_) {
+      ssize_t ret = write(it->second, message, sizeof(Message) + sizeof(Proposal));
+      if (ret != sizeof(Message) + sizeof(Proposal)) {
+        std::cerr << "write failed!" << std::endl;
+        throw;
+      }
+    }
+  }
+}
+
+void
+QuorumPeerPosix::broadcast(const CommitMsg& cm)
+{
+  {
+    boost::mutex::scoped_lock lock(mut);
+    std::cout << id_ << ": Broadcasting commit: " << cm << std::endl;
+  }
+  char message[sizeof(Message) + sizeof(CommitMsg)];
+  *reinterpret_cast<Message*>(message) = COMMIT;
+  *reinterpret_cast<CommitMsg*>(message+sizeof(Message)) = cm;
+  for (std::map<PeerId, int>::iterator it = comm_.begin();
+       it != comm_.end(); it++) {
+    if (it->first != id_) {
+      ssize_t ret = write(it->second, message, sizeof(Message) + sizeof(CommitMsg));
+      if (ret != sizeof(Message) + sizeof(CommitMsg)) {
         std::cerr << "write failed!" << std::endl;
         throw;
       }
@@ -221,6 +266,37 @@ QuorumPeerPosix::send(PeerId destination, const AckNewLeader& anl)
 }
 
 void
+QuorumPeerPosix::send(PeerId destination, const ProposalAck& ack)
+{
+  {
+    boost::mutex::scoped_lock lock(mut);
+    std::cout << id_ << ": Sending: destination: " << destination
+              << ", ProposalAck" << ack << std::endl;
+  }
+  char message[sizeof(Message) + sizeof(ProposalAck)];
+  *reinterpret_cast<Message*>(message) = ACKPROPOSAL;
+  *reinterpret_cast<ProposalAck*>(message+sizeof(Message)) = ack;
+  ssize_t ret = write(comm_[destination], message, sizeof(Message) +
+                      sizeof(ProposalAck));
+  if (ret != sizeof(Message) + sizeof(ProposalAck)) {
+    std::cerr << "write failed!" << std::endl;
+    throw;
+  }
+}
+
+void
+QuorumPeerPosix::ready()
+{
+  {
+    boost::mutex::scoped_lock lock(mut);
+    std::cout << id_ << ": Recovery complete" << std::endl;
+  }
+  if(state_ == Leading) {
+    leader_.write(13);
+  }
+}
+
+void
 QuorumPeerPosix::handleReceive(const boost::system::error_code& error) {
   if (!error) {
     switch (message_) {
@@ -312,6 +388,39 @@ QuorumPeerPosix::handleReceive(const boost::system::error_code& error) {
           std::cout << id_ << ": Received AckNewLeader: " << anl << std::endl;
         }
         leader_.receiveAckNewLeader(anl);
+      }
+      break;
+    case PROPOSAL:
+      {
+        Proposal p;
+        boost::asio::read(in_, boost::asio::buffer(&p, sizeof(Proposal)));
+        {
+          boost::mutex::scoped_lock lock(mut);
+          std::cout << id_ << ": Received Proposal: " << p << std::endl;
+        }
+        follower_.receiveProposal(p);
+      }
+      break;
+    case ACKPROPOSAL:
+      {
+        ProposalAck pa;
+        boost::asio::read(in_, boost::asio::buffer(&pa, sizeof(ProposalAck)));
+        {
+          boost::mutex::scoped_lock lock(mut);
+          std::cout << id_ << ": Received ProposalAck: " << pa << std::endl;
+        }
+        leader_.receiveAck(pa);
+      }
+      break;
+    case COMMIT:
+      {
+        CommitMsg cm;
+        boost::asio::read(in_, boost::asio::buffer(&cm, sizeof(CommitMsg)));
+        {
+          boost::mutex::scoped_lock lock(mut);
+          std::cout << id_ << ": Received CommitMsg: " << cm << std::endl;
+        }
+        follower_.receiveCommit(cm);
       }
     }
     boost::asio::async_read(in_, boost::asio::buffer(&message_, sizeof(Message)),

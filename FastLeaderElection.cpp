@@ -102,10 +102,11 @@ FastLeaderElection::updateVote(Vote& ours, const Vote& theirs) {
 bool
 FastLeaderElection::haveQuorum(const Vote& v, const VoteMap& map) {
   unsigned int i = 1;
+  unsigned int size = self_.getQuorumSize();
   for (VoteMap::const_iterator it = map.begin(); it != map.end(); it++) {
     if (v == it->second) {
       i++;
-      if (i >= self_.getQuorumSize())
+      if (i >= size)
         return true;
     }
   }

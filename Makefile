@@ -1,11 +1,14 @@
 SRCFILES := \
 	AckNewLeader.cpp \
 	Commit.cpp \
+	CommitMsg.cpp \
 	FastLeaderElection.cpp \
 	Follower.cpp \
 	Leader.cpp \
 	NewLeaderInfo.cpp \
 	PeerId.cpp \
+	Proposal.cpp \
+	ProposalAck.cpp \
 	QuorumPeerPosix.cpp \
 	StableStore.cpp \
 	State.cpp \
@@ -16,12 +19,15 @@ SRCFILES := \
 HDRFILES := \
 	AckNewLeader.hpp \
 	Commit.hpp \
+	CommitMsg.hpp \
 	FastLeaderElection.hpp \
 	Follower.hpp \
 	Leader.hpp \
 	Message.hpp \
 	NewLeaderInfo.hpp \
 	PeerId.hpp \
+	Proposal.hpp \
+	ProposalAck.hpp \
 	QuorumPeer.hpp \
 	QuorumPeerPosix.hpp \
 	StableStore.hpp \

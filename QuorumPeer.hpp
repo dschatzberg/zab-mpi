@@ -8,9 +8,12 @@
 
 #include "AckNewLeader.hpp"
 #include "Commit.hpp"
+#include "CommitMsg.hpp"
 #include "Follower.hpp"
 #include "Leader.hpp"
 #include "PeerId.hpp"
+#include "Proposal.hpp"
+#include "ProposalAck.hpp"
 #include "State.hpp"
 #include "Zxid.hpp"
 
@@ -25,12 +28,16 @@ public:
   virtual size_t getQuorumSize() = 0;
   virtual State getState() = 0;
   virtual void broadcast(const Vote& v) = 0;
+  virtual void broadcast(const Proposal& p) = 0;
+  virtual void broadcast(const CommitMsg& cm) = 0;
   virtual void send(PeerId destination, const Vote& v) = 0;
   virtual void send(PeerId destination, const Follower::Info& fi) = 0;
   virtual void send(PeerId destination, const NewLeaderInfo& nli) = 0;
   virtual void send(PeerId destination, const std::vector<Commit>& diff) = 0;
   virtual void send(PeerId destination, const Trunc& trunc) = 0;
-  virtual void send(PeerId destination, const AckNewLeader& trunc) = 0;
+  virtual void send(PeerId destination, const AckNewLeader& anl) = 0;
+  virtual void send(PeerId destination, const ProposalAck& pa) = 0;
+  virtual void ready() = 0;
 };
 
 #endif
