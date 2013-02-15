@@ -1,6 +1,12 @@
 message Message {
   enum MessageType {
     VOTE = 1;
+    FOLLOWERINFO = 2;
+    NEWLEADERINFO = 3;
+    ACKNEWLEADER = 4;
+    PROPOSAL = 5;
+    ACKPROPOSAL = 6;
+    COMMIT = 7;
   }
 
   required MessageType type = 1;
@@ -19,4 +25,32 @@ message Message {
     required ZabStatus status = 5;
   }
   optional Vote vote = 2;
+
+  message FollowerInfo {
+    required bytes from = 1;
+    required uint64 zxid = 2;
+  }
+  optional FollowerInfo follower_info = 3;
+
+  message Entry {
+    required uint64 zxid = 1;
+    required bytes message = 2;
+  }
+
+  message NewLeaderInfo {
+    required bytes from = 1;
+    required uint64 zxid = 2;
+    enum RecoverType {
+      DIFF = 1;
+    }
+    required RecoverType type = 3;
+    repeated Entry diff = 4;
+  }
+  optional NewLeaderInfo new_leader_info = 4;
+
+  optional Entry proposal = 5;
+
+  optional uint64 ack_zxid = 6;
+
+  optional uint64 commit_zxid = 7;
 }

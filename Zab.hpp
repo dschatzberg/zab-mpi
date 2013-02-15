@@ -1,9 +1,9 @@
 #ifndef ZAB_HPP
 #define ZAB_HPP
 
-#include "FastLeaderElection.hpp"
-#include "Log.hpp"
-#include "Zxid.hpp"
+#include <cstdint>
+
+#include <string>
 
 enum ZabStatus {
   LOOKING,
@@ -13,7 +13,7 @@ enum ZabStatus {
 
 class ZabCallback {
 public:
-  virtual void Deliver(Zxid id, const std::string& message) = 0;
+  virtual void Deliver(uint64_t id, const std::string& message) = 0;
   virtual void Status(ZabStatus status, const std::string *leader) = 0;
 };
 
@@ -21,25 +21,18 @@ class ReliableFifoCommunicator {
 public:
   virtual void Broadcast(const std::string& message) = 0;
   virtual void Send(const std::string& to, const std::string& message) = 0;
+  virtual uint32_t Size() = 0;
 };
+
+class Message;
 
 class Zab {
 public:
-  Zab(ZabCallback& cb, ReliableFifoCommunicator& comm, const std::string& id);
+  virtual uint64_t Propose(const std::string& message) = 0;
 
-  Zxid Propose(const std::string& message);
+  virtual void Startup() = 0;
 
-  void Startup();
-
-  void Receive(const std::string& message);
-private:
-  void LookForLeader();
-  ZabCallback& cb_;
-  ReliableFifoCommunicator& comm_;
-  const std::string& id_;
-  ZabStatus status_;
-  Log log_;
-  FastLeaderElection fle_;
+  virtual void Receive(const std::string& message) = 0;
 };
 
 #endif
