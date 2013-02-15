@@ -28,11 +28,12 @@ all: $(OBJECTS)
 
 all: test
 
-test: $(OBJFILES)
-	g++ $^ $(LIBS) -o $@
+test: $(HDRFILES) $(OBJFILES)
+	g++ $(CXXFLAGS) $(filter-out %.h, $^) $(LIBS) -o $@
 
 clean:
-	-$(RM) $(wildcard $(OBJFILES) $(DEPFILES) test)
+	-$(RM) $(wildcard $(OBJFILES) $(DEPFILES) test \
+	$(filter %.pb.cc, $(SRCFILES)) $(filter %.pb.h, $(HDRFILES)))
 
 -include $(DEPFILES)
 
@@ -40,4 +41,4 @@ clean:
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 %.pb.h %.pb.cc: %.proto
-	protoc -cpp_out=. $<
+	protoc --cpp_out=. $<
