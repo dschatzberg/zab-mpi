@@ -4,7 +4,6 @@ SRCFILES := \
 	Leader.cc \
 	Log.cc \
 	Message.pb.cc \
-	test.cc \
 	ZabImpl.cc
 HDRFILES := \
 	FastLeaderElection.hpp \
@@ -21,15 +20,20 @@ DEPFILES := $(patsubst %.cc, %.d, $(SRCFILES))
 
 .PHONY: all clean
 
-CXXFLAGS := -g -std=gnu++0x -Wall -Werror -I/usr/include
+CXXFLAGS := -g -Wall -Werror -I/usr/include
 LIBS := -lboost_system -lboost_thread -lpthread -lprotobuf
+BGLIBS := -lpthread -lprotobuf
+BGLDFLAGS := -L ~/usr/lib
 
 all: $(OBJECTS)
 
 all: test
 
-test: $(HDRFILES) $(OBJFILES)
-	g++ $(CXXFLAGS) $(filter-out %.h, $^) $(LIBS) -o $@
+test: $(HDRFILES) $(OBJFILES) test.o
+	$(CXX) $(CXXFLAGS) $(OBJFILES) test.o $(LIBS) -o $@
+
+bgtest: $(HDRFILES) $(OBJFILES) bgtest.o
+	$(CXX) $(CXXFLAGS) $(BGLDFLAGS) $(OBJFILES) bgtest.o $(BGLIBS) -o $@
 
 clean:
 	-$(RM) $(wildcard $(OBJFILES) $(DEPFILES) test \

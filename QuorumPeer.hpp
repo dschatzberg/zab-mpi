@@ -1,7 +1,7 @@
 #ifndef QUORUMPEER_HPP
 #define QUORUMPEER_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 class QuorumPeer {
 public:
@@ -10,6 +10,7 @@ public:
   virtual void Elected(const std::string& leader, uint64_t zxid) = 0;
   virtual void Ready() = 0;
   virtual int QuorumSize() = 0;
+  virtual ~QuorumPeer() {}
 };
 
 #endif

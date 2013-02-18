@@ -1,7 +1,7 @@
 #ifndef LOG_HPP
 #define LOG_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <set>
 #include <string>

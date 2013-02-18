@@ -67,7 +67,7 @@ Leader::Receive(uint64_t zxid)
 {
   if (acks_.count(zxid)) {
     ++acks_[zxid];
-    if ((acks_[zxid] + 1) >= self_.QuorumSize()) {
+    if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
       acks_.erase(zxid);
       commit_.set_commit_zxid(zxid);
       self_.Broadcast(commit_);
@@ -81,7 +81,7 @@ Leader::ReceiveAckNewLeader()
 {
   if (leading_ && recovering_) {
     ack_count_++;
-    if ((ack_count_ + 1) >= self_.QuorumSize()) {
+    if ((ack_count_ + 1) >= (uint32_t)self_.QuorumSize()) {
       recovering_ = false;
       self_.Ready();
     }

@@ -1,7 +1,7 @@
 #ifndef LEADER_HPP
 #define LEADER_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <map>
 

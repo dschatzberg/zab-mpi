@@ -1,12 +1,6 @@
 #include <iostream>
 
-#include <boost/thread.hpp>
-
 #include "ZabImpl.hpp"
-
-namespace {
-  boost::mutex mut;
-}
 
 ZabImpl::ZabImpl(ZabCallback& cb, ReliableFifoCommunicator& comm,
                  const std::string& id)
@@ -36,9 +30,7 @@ ZabImpl::Receive(const std::string& message)
   if(!foo) {
     throw;
   }
-  mut.lock();
   std::cout << id_ << ": Received: " << m.DebugString();
-  mut.unlock();
   switch(m.type()) {
   case Message::VOTE:
     fle_.Receive(m.vote());
@@ -67,10 +59,8 @@ ZabImpl::Receive(const std::string& message)
 void
 ZabImpl::Peer::Elected(const std::string& leader, uint64_t zxid)
 {
-  mut.lock();
   std::cout << zab_.id_ << ": Elected " << leader << " with Zxid " <<
     std::hex << zxid << std::endl;
-  mut.unlock();
 
   zab_.leader_id_ = leader;
 
@@ -109,9 +99,7 @@ ZabImpl::LookForLeader()
 void
 ZabImpl::Peer::Send(const std::string& id, const Message& message)
 {
-  mut.lock();
   std::cout << zab_.id_ << ": Sending Message to " << id << ": " << message.DebugString();
-  mut.unlock();
   std::string str;
   message.SerializeToString(&str);
   zab_.comm_.Send(id, str);
@@ -120,9 +108,7 @@ ZabImpl::Peer::Send(const std::string& id, const Message& message)
 void
 ZabImpl::Peer::Broadcast(const Message& message)
 {
-  mut.lock();
   std::cout << zab_.id_ << ": Broadcasting Message: " << message.DebugString();
-  mut.unlock();
   std::string str;
   message.SerializeToString(&str);
   zab_.comm_.Broadcast(str);

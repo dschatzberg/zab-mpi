@@ -1,7 +1,7 @@
 #ifndef FASTLEADERELECTION_HPP
 #define FASTLEADERELECTION_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <map>
 

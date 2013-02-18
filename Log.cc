@@ -14,7 +14,7 @@ Log::LastZxid()
 void
 Log::NewEpoch()
 {
-  last_zxid_ = (last_zxid_ & 0xFFFFFFFF00000000) + (1ULL << 32);
+  last_zxid_ = (last_zxid_ & 0xFFFFFFFF00000000ULL) + (1ULL << 32);
 }
 
 std::map<uint64_t, std::string>::const_iterator
