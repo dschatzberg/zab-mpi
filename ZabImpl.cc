@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdexcept>
 
 #include "ZabImpl.hpp"
 
@@ -28,7 +29,7 @@ ZabImpl::Receive(const std::string& message)
   Message m;
   bool foo = m.ParseFromString(message);
   if(!foo) {
-    throw;
+    throw std::runtime_error("Failed to parse message!");
   }
   std::cout << id_ << ": Received: " << m.DebugString();
   switch(m.type()) {
