@@ -25,11 +25,15 @@ Follower::Receive(const Message::NewLeaderInfo& nli)
 {
   switch(nli.type()) {
   case Message::NewLeaderInfo::DIFF:
-    for (int i = 0; i < nli.diff_size(); i++) {
-      log_.Accept(nli.diff(i).zxid(), nli.diff(i).message());
+    for (int i = 0; i < nli.commit_diff_size(); i++) {
+      log_.Accept(nli.commit_diff(i).zxid(), nli.commit_diff(i).message());
     }
-    for (int i = 0; i < nli.diff_size(); i++) {
-      log_.Commit(nli.diff(i).zxid());
+    for (int i = 0; i < nli.commit_diff_size(); i++) {
+      log_.Commit(nli.commit_diff(i).zxid());
+    }
+    for (int i = 0; i < nli.propose_diff_size(); i++) {
+      log_.Accept(nli.propose_diff(i).zxid(), nli.propose_diff(i).message());
+      ack_.add_ack_new_leader_zxids(nli.propose_diff(i).zxid());
     }
     break;
   }

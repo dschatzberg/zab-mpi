@@ -18,6 +18,7 @@ public:
   void NewEpoch();
   std::map<uint64_t, std::string>::const_iterator Diff(uint64_t zxid);
   std::map<uint64_t, std::string>::const_iterator End();
+  std::map<uint64_t, std::string>::const_iterator EndCommit();
   void Accept(uint64_t zxid, const std::string& message);
   void Commit(uint64_t zxid);
 private:

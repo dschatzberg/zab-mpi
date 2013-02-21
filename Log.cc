@@ -29,6 +29,12 @@ Log::End()
   return log_.end();
 }
 
+std::map<uint64_t, std::string>::const_iterator
+Log::EndCommit()
+{
+  return log_.upper_bound(last_committed_zxid_);
+}
+
 uint64_t
 Log::CommittedZxid()
 {

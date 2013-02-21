@@ -17,7 +17,7 @@ public:
   uint64_t Propose(const std::string& message);
   void Receive(const Message::FollowerInfo& fi);
   void Receive(uint64_t zxid);
-  void ReceiveAckNewLeader();
+  void ReceiveAckNewLeader(const Message& acks);
   // void receiveFollower(const Follower::Info& fi);
   // void receiveAckNewLeader(const AckNewLeader& anl);
   // void receiveAck(const ProposalAck& pa);

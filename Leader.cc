@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "Leader.hpp"
 #include "Log.hpp"
 #include "QuorumPeer.hpp"
@@ -18,6 +20,12 @@ Leader::Lead()
   recovering_ = true;
   ack_count_ = 0;
   acks_.clear();
+  for (std::map<uint64_t, std::string>::const_iterator it =
+         log_.Diff(log_.CommittedZxid());
+       it != log_.End();
+       it++) {
+    acks_[it->first] = 0;
+  }
   log_.NewEpoch();
 }
 
@@ -43,22 +51,30 @@ void
 Leader::Receive(const Message::FollowerInfo& fi)
 {
   if (leading_) {
-    if (recovering_) {
-      message_.mutable_new_leader_info()->set_zxid(log_.LastZxid());
-      uint64_t zxid = log_.CommittedZxid();
-      if (fi.zxid() <= zxid) {
-        message_.mutable_new_leader_info()->set_type(Message::NewLeaderInfo::DIFF);
-        for(std::map<uint64_t, std::string>::const_iterator it = log_.Diff(fi.zxid());
-            it != log_.End();
-            ++it) {
-          Message::Entry* ep =
-            message_.mutable_new_leader_info()->add_diff();
-          ep->set_zxid(it->first);
-          ep->set_message(it->second);
-        }
+    message_.mutable_new_leader_info()->set_zxid(log_.LastZxid());
+    uint64_t zxid = log_.CommittedZxid();
+    if (fi.zxid() <= zxid) {
+      message_.mutable_new_leader_info()->set_type(Message::NewLeaderInfo::DIFF);
+      for(std::map<uint64_t, std::string>::const_iterator it = log_.Diff(fi.zxid());
+          it != log_.EndCommit();
+          ++it) {
+        Message::Entry* ep =
+          message_.mutable_new_leader_info()->add_commit_diff();
+        ep->set_zxid(it->first);
+        ep->set_message(it->second);
       }
-      self_.Send(fi.from(), message_);
+      for (std::map<uint64_t, std::string>::const_iterator it = log_.Diff(zxid);
+           it != log_.End();
+           ++it) {
+        Message::Entry* ep =
+          message_.mutable_new_leader_info()->add_propose_diff();
+        ep->set_zxid(it->first);
+        ep->set_message(it->second);
+      }
+    } else {
+      throw std::runtime_error("Unhandled recovery");
     }
+    self_.Send(fi.from(), message_);
   }
 }
 
@@ -77,10 +93,13 @@ Leader::Receive(uint64_t zxid)
 }
 
 void
-Leader::ReceiveAckNewLeader()
+Leader::ReceiveAckNewLeader(const Message& acks)
 {
   if (leading_ && recovering_) {
     ack_count_++;
+    for (int i = 0; i < acks.ack_new_leader_zxids_size(); i++) {
+      Receive(acks.ack_new_leader_zxids(i));
+    }
     if ((ack_count_ + 1) >= (uint32_t)self_.QuorumSize()) {
       recovering_ = false;
       self_.Ready();

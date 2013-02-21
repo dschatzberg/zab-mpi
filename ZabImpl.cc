@@ -43,7 +43,7 @@ ZabImpl::Receive(const std::string& message)
     follower_.Receive(m.new_leader_info());
     break;
   case Message::ACKNEWLEADER:
-    leader_.ReceiveAckNewLeader();
+    leader_.ReceiveAckNewLeader(m);
     break;
   case Message::PROPOSAL:
     follower_.Receive(m.proposal());
@@ -75,7 +75,7 @@ ZabImpl::Peer::Elected(const std::string& leader, uint64_t zxid)
 int
 ZabImpl::Peer::QuorumSize()
 {
-  return (zab_.comm_.Size() + 1) / 2;
+  return (zab_.comm_.Size() / 2) + 1;
 }
 
 void

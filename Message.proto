@@ -44,13 +44,16 @@ message Message {
       DIFF = 1;
     }
     required RecoverType type = 3;
-    repeated Entry diff = 4;
+    repeated Entry commit_diff = 4;
+    repeated Entry propose_diff = 5;
   }
   optional NewLeaderInfo new_leader_info = 4;
 
-  optional Entry proposal = 5;
+  repeated uint64 ack_new_leader_zxids = 5;
 
-  optional uint64 ack_zxid = 6;
+  optional Entry proposal = 6;
 
-  optional uint64 commit_zxid = 7;
+  optional uint64 ack_zxid = 7;
+
+  optional uint64 commit_zxid = 8;
 }
