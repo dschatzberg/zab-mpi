@@ -20,7 +20,7 @@ DEPFILES := $(patsubst %.cc, %.d, $(SRCFILES))
 
 .PHONY: all clean
 
-CXXFLAGS := -g -Wall -Werror -I/usr/include
+CXXFLAGS := $(CXXFLAGS) -g -Wall -Werror -I/usr/include
 LIBS := -lboost_system -lboost_thread -lpthread -lprotobuf
 BGLIBS := -lpthread -lprotobuf
 BGLDFLAGS := -L ~/usr/lib

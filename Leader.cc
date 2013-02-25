@@ -4,9 +4,15 @@
 #include "Log.hpp"
 #include "QuorumPeer.hpp"
 
-Leader::Leader(QuorumPeer& self, Log& log, const std::string& id)
-  : self_(self), log_(log), recovering_(true), leading_(false)
+namespace {
+  const long RECOVER_CYCLES = 425000000;
+}
+
+Leader::Leader(QuorumPeer& self, Log& log,
+               TimerManager& tm, const std::string& id)
+  : self_(self), log_(log), tm_(tm), recovering_(true), leading_(false)
 {
+  recover_timer_ = tm_.Alloc(this);
   message_.set_type(Message::NEWLEADERINFO);
   message_.mutable_new_leader_info()->set_from(id);
   propose_.set_type(Message::PROPOSAL);
@@ -18,6 +24,7 @@ Leader::Lead()
 {
   leading_ = true;
   recovering_ = true;
+  tm_.Arm(recover_timer_, RECOVER_CYCLES);
   ack_count_ = 0;
   acks_.clear();
   for (std::map<uint64_t, std::string>::const_iterator it =
@@ -33,7 +40,7 @@ uint64_t
 Leader::Propose(const std::string& message)
 {
   if (!leading_ || recovering_) {
-    throw;
+    throw std::runtime_error("Not ready to handle new proposals!");
   }
 
   uint64_t zxid = log_.LastZxid();
@@ -81,13 +88,15 @@ Leader::Receive(const Message::FollowerInfo& fi)
 void
 Leader::Receive(uint64_t zxid)
 {
-  if (acks_.count(zxid)) {
-    ++acks_[zxid];
-    if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
-      acks_.erase(zxid);
-      commit_.set_commit_zxid(zxid);
-      self_.Broadcast(commit_);
-      log_.Commit(zxid);
+  if (leading_ && !recovering_) {
+    if (acks_.count(zxid)) {
+      ++acks_[zxid];
+      if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
+        acks_.erase(zxid);
+        commit_.set_commit_zxid(zxid);
+        self_.Broadcast(commit_);
+        log_.Commit(zxid);
+      }
     }
   }
 }
@@ -102,38 +111,16 @@ Leader::ReceiveAckNewLeader(const Message& acks)
     }
     if ((ack_count_ + 1) >= (uint32_t)self_.QuorumSize()) {
       recovering_ = false;
+      tm_.Disarm(recover_timer_);
       self_.Ready();
     }
   }
 }
-// void
-// Leader::receiveFollower(const Follower::Info& fi)
-// {
-//   if (self_.getState() == Leading) {
-//     if (!active_) {
-//       self_.send(fi.from_, NewLeaderInfo(store_.getLastZxid()));
-//       Zxid zxid = store_.lastCommittedZxid();
-//       if (fi.lastZxid_ <= zxid) {
-//         std::vector<Commit> diff;
-//         store_.diff(diff, fi.lastZxid_);
-//         self_.send(fi.from_, diff);
-//       } else {
-//         self_.send(fi.from_, Trunc(zxid));
-//       }
-//     }
-//   }
-// }
 
-// void
-// Leader::receiveAckNewLeader(const AckNewLeader& anl)
-// {
-//   if (self_.getState() == Leading) {
-//     if (!active_) {
-//       ackCount_++;
-//       if ((ackCount_ + 1) >= self_.getQuorumSize()) {
-//         active_ = true;
-//         self_.ready();
-//       }
-//     }
-//   }
-// }
+void
+Leader::Callback()
+{
+  leading_ = false;
+  recovering_ = true;
+  self_.Fail();
+}

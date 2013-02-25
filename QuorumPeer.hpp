@@ -9,6 +9,7 @@ public:
   virtual void Broadcast(const Message& message) = 0;
   virtual void Elected(const std::string& leader, uint64_t zxid) = 0;
   virtual void Ready() = 0;
+  virtual void Fail() = 0;
   virtual int QuorumSize() = 0;
   virtual ~QuorumPeer() {}
 };

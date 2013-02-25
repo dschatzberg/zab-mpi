@@ -5,13 +5,15 @@
 #include <vector>
 
 #include "Message.pb.h"
+#include "Zab.hpp"
 
 class Log;
 class QuorumPeer;
 
-class Follower {
+class Follower : public TimerManager::TimerCallback {
 public:
-  Follower(QuorumPeer& self, Log& log, const std::string& id);
+  Follower(QuorumPeer& self, Log& log, TimerManager& tm, const std::string& id);
+  virtual void Callback();
   void Recover(const std::string& leader);
   void Receive(const Message::NewLeaderInfo& nli);
   void Receive(const Message::Entry& proposal);
@@ -33,7 +35,10 @@ public:
 private:
   QuorumPeer& self_;
   Log& log_;
+  TimerManager& tm_;
+  int recover_timer_;
   std::string leader_;
+  bool following_;
   bool recovering_;
   Message message_;
   Message ack_;

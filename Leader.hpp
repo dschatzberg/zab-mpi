@@ -6,25 +6,26 @@
 #include <map>
 
 #include "Message.pb.h"
+#include "Zab.hpp"
 
 class Log;
 class QuorumPeer;
 
-class Leader {
+class Leader : public TimerManager::TimerCallback {
 public:
-  Leader(QuorumPeer& self, Log& store, const std::string& id);
+  Leader(QuorumPeer& self, Log& store, TimerManager& tm,
+         const std::string& id);
+  virtual void Callback();
   void Lead();
   uint64_t Propose(const std::string& message);
   void Receive(const Message::FollowerInfo& fi);
   void Receive(uint64_t zxid);
   void ReceiveAckNewLeader(const Message& acks);
-  // void receiveFollower(const Follower::Info& fi);
-  // void receiveAckNewLeader(const AckNewLeader& anl);
-  // void receiveAck(const ProposalAck& pa);
-  // void write(uint32_t val);
 private:
   QuorumPeer& self_;
   Log& log_;
+  TimerManager& tm_;
+  int recover_timer_;
   bool recovering_;
   bool leading_;
   uint32_t ack_count_;

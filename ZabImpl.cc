@@ -4,10 +4,10 @@
 #include "ZabImpl.hpp"
 
 ZabImpl::ZabImpl(ZabCallback& cb, ReliableFifoCommunicator& comm,
-                 const std::string& id)
-  : peer_(*this), cb_(cb), comm_(comm), id_(id), status_(LOOKING), log_(cb_),
-    fle_(peer_, log_, id_), leader_(peer_, log_, id_),
-    follower_(peer_, log_, id_)
+                 TimerManager& tm, const std::string& id)
+  : peer_(*this), cb_(cb), comm_(comm), tm_(tm), id_(id), status_(LOOKING),
+    log_(cb_), fle_(peer_, log_, id_), leader_(peer_, log_, tm_, id_),
+    follower_(peer_, log_, tm_, id_)
 {
 }
 
@@ -31,7 +31,9 @@ ZabImpl::Receive(const std::string& message)
   if(!foo) {
     throw std::runtime_error("Failed to parse message!");
   }
+#ifdef LOG
   std::cout << id_ << ": Received: " << m.DebugString();
+#endif
   switch(m.type()) {
   case Message::VOTE:
     fle_.Receive(m.vote());
@@ -60,9 +62,10 @@ ZabImpl::Receive(const std::string& message)
 void
 ZabImpl::Peer::Elected(const std::string& leader, uint64_t zxid)
 {
+#ifdef LOG
   std::cout << zab_.id_ << ": Elected " << leader << " with Zxid " <<
     std::hex << zxid << std::endl;
-
+#endif
   zab_.leader_id_ = leader;
 
   if (zab_.id_ == leader) {
@@ -100,7 +103,9 @@ ZabImpl::LookForLeader()
 void
 ZabImpl::Peer::Send(const std::string& id, const Message& message)
 {
+#ifdef LOG
   std::cout << zab_.id_ << ": Sending Message to " << id << ": " << message.DebugString();
+#endif
   std::string str;
   message.SerializeToString(&str);
   zab_.comm_.Send(id, str);
@@ -109,8 +114,16 @@ ZabImpl::Peer::Send(const std::string& id, const Message& message)
 void
 ZabImpl::Peer::Broadcast(const Message& message)
 {
+#ifdef LOG
   std::cout << zab_.id_ << ": Broadcasting Message: " << message.DebugString();
+#endif
   std::string str;
   message.SerializeToString(&str);
   zab_.comm_.Broadcast(str);
+}
+
+void
+ZabImpl::Peer::Fail()
+{
+  zab_.LookForLeader();
 }
