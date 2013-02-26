@@ -95,8 +95,10 @@ ZabImpl::Peer::Ready()
 void
 ZabImpl::LookForLeader()
 {
+  if (status_ != LOOKING) {
+    cb_.Status(LOOKING, NULL);
+  }
   status_ = LOOKING;
-  cb_.Status(LOOKING, NULL);
   fle_.LookForLeader();
 }
 
@@ -125,5 +127,9 @@ ZabImpl::Peer::Broadcast(const Message& message)
 void
 ZabImpl::Peer::Fail()
 {
+#ifdef LOG
+  std::cout << zab_.id_ << ": Failure detected, moving to leader election"
+            << std::endl;
+#endif
   zab_.LookForLeader();
 }

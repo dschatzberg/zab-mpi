@@ -63,16 +63,16 @@ FastLeaderElection::Receive(const Message::Vote& v)
           Elect(vote_.vote().leader(), vote_.vote().zxid());
           return;
         }
+      }
 
-        //is there an existing quorum?
-        out_of_election_[v.from()] = Vote(v);
-        if (HaveQuorum(v, out_of_election_) &&
-            out_of_election_.count(v.leader())) {
-          vote_.mutable_vote()->set_leader(v.leader());
-          vote_.mutable_vote()->set_zxid(v.zxid());
-          Elect(vote_.vote().leader(), vote_.vote().zxid());
-          return;
-        }
+      //is there an existing quorum?
+      out_of_election_[v.from()] = Vote(v);
+      if (HaveQuorum(v, out_of_election_) &&
+          out_of_election_.count(v.leader())) {
+        vote_.mutable_vote()->set_leader(v.leader());
+        vote_.mutable_vote()->set_zxid(v.zxid());
+        Elect(vote_.vote().leader(), vote_.vote().zxid());
+        return;
       }
     }
   } else if (v.status() == Message::LOOKING) {
