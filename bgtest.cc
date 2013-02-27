@@ -1,7 +1,9 @@
 #include <iomanip>
 #include <iostream>
+#include <list>
 #include <queue>
 #include <sstream>
+#include <stack>
 #include <stdexcept>
 #include <utility>
 
@@ -13,13 +15,13 @@
 #include "ZabImpl.hpp"
 
 namespace {
-  const uint64_t NUM_WRITES = 100;
+  const uint64_t NUM_WRITES = 10000;
 }
 class ZabCallbackImpl : public ZabCallback {
 public:
   ZabCallbackImpl(ZabImpl*& zab, TimerManager& tm, const std::string& id) :
     zab_(zab), tm_(tm), cb_(*this), id_(id),
-    count_(0), mean_(0), sum_squares_diff_(0)
+    count_(0), old_mean_(0), old_s_(0), new_mean_(0), new_s_(0)
   {
     timer_ = tm_.Alloc(&cb_);
   }
@@ -28,14 +30,21 @@ public:
     count_++;
     if (status_ == LEADING) {
       uint64_t val = _bgp_GetTimeBase() - time_;
-      double delta = ((double)val) - mean_;
-      mean_ += delta / ((double)count_);
-      sum_squares_diff_ += delta * (((double)val) - mean_);
-      if (count_ < NUM_WRITES) {
-        tm_.Arm(timer_, 100000000);
+      if (count_ == 1) {
+        old_mean_ = new_mean_ = val;
+        old_s_ = 0.0;
       } else {
-        std::cout << "Latency = " << mean_ << ", variance = " <<
-          sum_squares_diff_/((double)(count_ - 1)) << std::endl;
+        new_mean_ = old_mean_ + (val - old_mean_)/count_;
+        new_s_ = old_s_ + (val - old_mean_)*(val - new_mean_);
+
+        old_mean_ = new_mean_;
+        old_s_ = new_s_;
+      }
+      if (count_ < NUM_WRITES) {
+        tm_.Arm(timer_, 1000000);
+      } else {
+        std::cout << "Latency = " << new_mean_ << ", variance = " <<
+          new_s_/(count_ - 1) << std::endl;
       }
     }
     if (count_ >= NUM_WRITES) {
@@ -46,7 +55,7 @@ public:
   {
     status_ = status;
     if (status != LOOKING) {
-      std::cout << id_ << ": Elected " << *leader << std::endl;
+      //std::cout << id_ << ": Elected " << *leader << std::endl;
     }
     if (status == LEADING) {
       tm_.Arm(timer_, 850000000);
@@ -75,8 +84,10 @@ private:
   const std::string id_;
   uint64_t time_;
   uint64_t count_;
-  double mean_;
-  double sum_squares_diff_;
+  double old_mean_;
+  double old_s_;
+  double new_mean_;
+  double new_s_;
 };
 
 int recv_function(DMA_RecFifo_t* f_ptr,
@@ -189,7 +200,15 @@ public:
       throw std::runtime_error("Tree receive packet allocation failed!");
     }
     _bgp_TreeMakeBcastHdr(&hdr_, 1, 0);
-    tree_sh_.arg0 = rank_;
+    if (posix_memalign(&tree_sh_, 16, sizeof(_BGPTreePacketSoftHeader)) != 0) {
+      perror("posix_memalign");
+      throw std::runtime_error("Tree receive packet allocation failed!");
+    }
+    if (posix_memalign(&rcv_sh_, 16, sizeof(_BGPTreePacketSoftHeader)) != 0) {
+      perror("posix_memalign");
+      throw std::runtime_error("Tree receive packet allocation failed!");
+    }
+    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg0 = rank_;
   }
   virtual void Broadcast(const std::string& message)
   {
@@ -226,9 +245,9 @@ public:
       throw std::runtime_error("DMA_RecFifoPollNormalFifoById Failed!");
     }
     if (_bgp_TreeReadyToReceiveVC0()) {
-      _bgp_TreeRawReceivePacketVC0_sh(&rcv_hdr_, &rcv_sh_, bcast_rcv_mem_);
-      if (rcv_sh_.arg0 != rank_) {
-        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_), rcv_sh_.arg1));
+      _bgp_TreeRawReceivePacketVC0_sh(&rcv_hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_), bcast_rcv_mem_);
+      if (reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 != rank_) {
+        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_), reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg1));
       }
     }
   }
@@ -238,8 +257,8 @@ private:
       throw std::runtime_error("Unsupported message size!");
     }
     message.copy(static_cast<char*>(bcast_mem_), message.length());
-    tree_sh_.arg1 = message.length();
-    _bgp_TreeRawSendPacketVC0_sh(&hdr_, &tree_sh_, bcast_mem_);
+    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 = message.length();
+    _bgp_TreeRawSendPacketVC0_sh(&hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
   }
   void SendToRank(int rank, const std::string& message) {
 
@@ -299,8 +318,8 @@ private:
   std::queue<std::string> bcast_queue_;
   _BGP_TreeHwHdr hdr_;
   _BGP_TreeHwHdr rcv_hdr_;
-  _BGPTreePacketSoftHeader tree_sh_;
-  _BGPTreePacketSoftHeader rcv_sh_;
+  void* tree_sh_;
+  void* rcv_sh_;
 };
 
 int recv_function(DMA_RecFifo_t* f_ptr,
@@ -316,49 +335,70 @@ int recv_function(DMA_RecFifo_t* f_ptr,
 
 class TimerManagerImpl : public TimerManager {
 public:
-  TimerManagerImpl() : armed_(false), count_(0)
+  TimerManagerImpl() : count_(0)
   {
   }
   virtual int Alloc(TimerManager::TimerCallback *cb)
   {
-    int ret = count_;
-    count_++;
-    cb_vector_.insert(cb_vector_.begin() + ret, cb);
+    int ret;
+    if (!free_list_.empty()) {
+      ret = free_list_.top();
+      free_list_.pop();
+    } else {
+      ret = count_;
+      count_++;
+    }
+    cb_map_[ret] = cb;
     return ret;
   }
   virtual void Free(int timer)
   {
+    free_list_.push(timer);
   }
 
   virtual void Arm(int timer, uint64_t cycles)
   {
-    if (armed_) {
-      throw std::runtime_error("Currently only support a single armed timer");
+    uint64_t time = _bgp_GetTimeBase() + cycles;
+    std::list<std::pair<uint64_t, int> >::iterator it;
+    for (it = timer_list_.begin();
+         it != timer_list_.end();
+         it++) {
+      if (it->first > time) {
+        break;
+      }
     }
-
-    armed_ = true;
-    armed_timer_ = timer;
-    wait_for_ = _bgp_GetTimeBase() + cycles;
+    timer_list_.insert(it, std::make_pair(time, timer));
   }
 
   virtual void Disarm(int timer)
   {
-    armed_ = false;
+    for (std::list<std::pair<uint64_t, int> >::iterator
+           it = timer_list_.begin();
+         it != timer_list_.end();
+         it++) {
+      if (it->second == timer) {
+        timer_list_.erase(it);
+        return;
+      }
+    }
   }
 
   void Dispatch()
   {
-    if (armed_ && _bgp_GetTimeBase() >= wait_for_) {
-      cb_vector_[armed_timer_]->Callback();
-      armed_ = false;
+    while (!timer_list_.empty()) {
+      if (timer_list_.front().first <= _bgp_GetTimeBase()) {
+        cb_map_[timer_list_.front().second]->Callback();
+        timer_list_.pop_front();
+      } else {
+        return;
+      }
     }
   }
 private:
-  bool armed_;
   int count_;
-  int armed_timer_;
-  uint64_t wait_for_;
-  std::vector<TimerManager::TimerCallback*> cb_vector_;
+  std::stack<int> free_list_;
+  std::map<int, TimerManager::TimerCallback*> cb_map_;
+  std::list<std::pair<uint64_t, int> > timer_list_;
 };
 
 int main()
