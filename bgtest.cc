@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include <bpcore/bgp_collective_inlines.h>
 #include <common/bgp_personality_inlines.h>
 #include <spi/DMA_Addressing.h>
 #include <spi/GlobInt.h>
@@ -78,9 +79,20 @@ private:
   double sum_squares_diff_;
 };
 
+int recv_function(DMA_RecFifo_t* f_ptr,
+                  DMA_PacketHeader_t* packet_ptr,
+                  void* recv_func_param,
+                  char* payload_ptr,
+                  int payload_bytes);
+
 class BGCommunicator : public ReliableFifoCommunicator {
 public:
-BGCommunicator(DMA_RecFifoGroup_t*& rec_fifo)
+  friend int recv_function(DMA_RecFifo_t* f_ptr,
+                           DMA_PacketHeader_t* packet_ptr,
+                           void* recv_func_param,
+                           char* payload_ptr,
+                           int payload_bytes);
+  BGCommunicator(ZabImpl*& zab) : zab_(zab)
   {
     _BGP_Personality_t pers;
     Kernel_GetPersonality(&pers, sizeof(pers));
@@ -113,17 +125,17 @@ BGCommunicator(DMA_RecFifoGroup_t*& rec_fifo)
       throw std::runtime_error("DMA_RecFifoSetMap Failed!");
     }
 
-    rec_fifo = DMA_RecFifoGetFifoGroup(0, 0, NULL, NULL,
+    rec_fifo_ = DMA_RecFifoGetFifoGroup(0, 0, NULL, NULL,
                                        NULL, NULL,
                                        (Kernel_InterruptGroup_t) 0);
-    if (rec_fifo == NULL) {
+    if (rec_fifo_ == NULL) {
       throw std::runtime_error("DMA_RecFifoGetFifoGroup Failed!");
     }
 
     posix_memalign(reinterpret_cast<void**>(&rec_fifo_data_), 32, DMA_MIN_REC_FIFO_SIZE_IN_BYTES);
-    if (DMA_RecFifoInitById(rec_fifo, 0,
+    if (DMA_RecFifoInitById(rec_fifo_, 0,
                             rec_fifo_data_, rec_fifo_data_,
-                            rec_fifo_data_ + DMA_MIN_REC_FIFO_SIZE_IN_BYTES) != 0) {
+                            static_cast<char*>(rec_fifo_data_)+ DMA_MIN_REC_FIFO_SIZE_IN_BYTES) != 0) {
       throw std::runtime_error("DMA_RecFifoInitById Failed!");
     }
 
@@ -143,7 +155,7 @@ BGCommunicator(DMA_RecFifoGroup_t*& rec_fifo)
     posix_memalign(reinterpret_cast<void**>(&inj_fifo_data_), 32, DMA_MIN_INJ_FIFO_SIZE_IN_BYTES);
     if (DMA_InjFifoInitById(&inj_fifo_, 0, inj_fifo_data_,
                             inj_fifo_data_,
-                            inj_fifo_data_ +
+                            static_cast<char*>(inj_fifo_data_) +
                             DMA_MIN_INJ_FIFO_SIZE_IN_BYTES) != 0) {
       throw std::runtime_error("DMA_InjFifoInitById Failed!");
     }
@@ -163,19 +175,28 @@ BGCommunicator(DMA_RecFifoGroup_t*& rec_fifo)
     buf_size_ = 64;
     posix_memalign(reinterpret_cast<void**>(&buf_), 16, 64);
     DMA_CounterSetBaseById(&inj_group_, 0, buf_);
-    DMA_CounterSetMaxById(&inj_group_, 0, buf_ + buf_size_);
+    DMA_CounterSetMaxById(&inj_group_, 0, static_cast<char*>(buf_) + buf_size_);
+    if ((function_id_ = DMA_RecFifoRegisterRecvFunction(recv_function,
+                                                       this, 0, 0)) < 0) {
+      throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
+    }
+    if (posix_memalign(&bcast_mem_, 16, 256) != 0) {
+      perror("posix_memalign");
+      throw std::runtime_error("Tree packet allocation failed!");
+    }
+    if (posix_memalign(&bcast_rcv_mem_, 16, 256) != 0) {
+      perror("posix_memalign");
+      throw std::runtime_error("Tree receive packet allocation failed!");
+    }
+    _bgp_TreeMakeBcastHdr(&hdr_, 1, 0);
+    tree_sh_.arg0 = rank_;
   }
   virtual void Broadcast(const std::string& message)
   {
-    // std::cout << "Rank " << rank_ <<" broadcasting: ";
-    // for (unsigned i = 0; i < message.length(); i++) {
-    //   std::cout << std::setfill('0') << std::setw(2) << std::hex << (int)message[i];
-    // }
-    // std::cout << std::endl;
-    for (unsigned i = 0; i < size_; i++) {
-      if (i != rank_) {
-        SendToRank(i, message);
-      }
+    if (_bgp_TreeOkToSendVC0()) {
+      BcastNoCheck(message);
+    } else {
+      bcast_queue_.push(message);
     }
   }
   virtual void Send(const std::string& to, const std::string& message)
@@ -189,19 +210,37 @@ BGCommunicator(DMA_RecFifoGroup_t*& rec_fifo)
   {
     return size_;
   }
-  void set_function_id(int function_id)
-  {
-    function_id_ = function_id;
-  }
   void Dispatch()
   {
     if (!queue_.empty() && DMA_CounterGetValueById(&inj_group_, 0) == 0) {
-      std::pair<int, std::string> to_send = queue_.front();
+      std::pair<int, std::string>& to_send = queue_.front();
       SendNoCheck(to_send.first, to_send.second);
       queue_.pop();
     }
+    if (!bcast_queue_.empty() && _bgp_TreeOkToSendVC0()) {
+      std::string& to_send = bcast_queue_.front();
+      BcastNoCheck(to_send);
+      bcast_queue_.pop();
+    }
+    if (DMA_RecFifoPollNormalFifoById(1, 0, 1, 0, rec_fifo_) < 0) {
+      throw std::runtime_error("DMA_RecFifoPollNormalFifoById Failed!");
+    }
+    if (_bgp_TreeReadyToReceiveVC0()) {
+      _bgp_TreeRawReceivePacketVC0_sh(&rcv_hdr_, &rcv_sh_, bcast_rcv_mem_);
+      if (rcv_sh_.arg0 != rank_) {
+        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_), rcv_sh_.arg1));
+      }
+    }
   }
 private:
+  void BcastNoCheck(const std::string& message) {
+    if (message.length() > 256) {
+      throw std::runtime_error("Unsupported message size!");
+    }
+    message.copy(static_cast<char*>(bcast_mem_), message.length());
+    tree_sh_.arg1 = message.length();
+    _bgp_TreeRawSendPacketVC0_sh(&hdr_, &tree_sh_, bcast_mem_);
+  }
   void SendToRank(int rank, const std::string& message) {
 
     if (DMA_CounterGetValueById(&inj_group_, 0) != 0 || !queue_.empty()) {
@@ -222,9 +261,9 @@ private:
       free(buf_);
       posix_memalign(reinterpret_cast<void**>(buf_), 16, buf_size_);
       DMA_CounterSetBaseById(&inj_group_, 0, buf_);
-      DMA_CounterSetMaxById(&inj_group_, 0, buf_ + buf_size_);
+      DMA_CounterSetMaxById(&inj_group_, 0, static_cast<char*>(buf_) + buf_size_);
     }
-    message.copy(buf_, message.length());
+    message.copy(static_cast<char*>(buf_), message.length());
     DMA_CounterSetValueById(&inj_group_, 0, message.size());
     DMA_CounterSetEnableById(&inj_group_, 0);
 
@@ -242,17 +281,26 @@ private:
       throw std::runtime_error("DMA_InjFifoInjectDescriptorById Failed!");
     }
   }
+  ZabImpl*& zab_;
   std::string id_;
   unsigned rank_;
   unsigned size_;
   int function_id_;
   DMA_CounterGroup_t inj_group_;
   DMA_InjFifoGroup_t inj_fifo_;
-  char* inj_fifo_data_ __attribute__((__may_alias__));
-  char* rec_fifo_data_ __attribute__((__may_alias__));
-  char* buf_ __attribute__((__may_alias__));
+  void* inj_fifo_data_;
+  void* rec_fifo_data_;
+  void* bcast_mem_;
+  void* bcast_rcv_mem_;
+  void* buf_;
   unsigned buf_size_;
+  DMA_RecFifoGroup_t* rec_fifo_;
   std::queue<std::pair<int, std::string> > queue_;
+  std::queue<std::string> bcast_queue_;
+  _BGP_TreeHwHdr hdr_;
+  _BGP_TreeHwHdr rcv_hdr_;
+  _BGPTreePacketSoftHeader tree_sh_;
+  _BGPTreePacketSoftHeader rcv_sh_;
 };
 
 int recv_function(DMA_RecFifo_t* f_ptr,
@@ -261,13 +309,8 @@ int recv_function(DMA_RecFifo_t* f_ptr,
                   char* payload_ptr,
                   int payload_bytes)
 {
-  // std::cout << "Received: ";
-  // for (unsigned i = 0; i < packet_ptr->SW_Arg; i++) {
-  //   std::cout << std::setfill('0') << std::setw(2) << std::hex << (int)payload_ptr[i];
-  // }
-  // std::cout << std::endl;
-  ZabImpl* zab = *reinterpret_cast<ZabImpl**>(recv_func_param);
-  zab->Receive(std::string(payload_ptr, packet_ptr->SW_Arg));
+  BGCommunicator* comm = reinterpret_cast<BGCommunicator*>(recv_func_param);
+  comm->zab_->Receive(std::string(payload_ptr, packet_ptr->SW_Arg));
   return 0;
 }
 
@@ -320,15 +363,8 @@ private:
 
 int main()
 {
-  DMA_RecFifoGroup_t* rec_fifo;
-  BGCommunicator comm(rec_fifo);
-  int function_id;
   ZabImpl* zab;
-  if ((function_id = DMA_RecFifoRegisterRecvFunction(recv_function,
-                                                     &zab, 0, 0)) < 0) {
-    throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
-  }
-  comm.set_function_id(function_id);
+  BGCommunicator comm(zab);
   GlobInt_Barrier(0, NULL, NULL);
   _BGP_Personality_t pers;
   Kernel_GetPersonality(&pers, sizeof(pers));
@@ -339,9 +375,6 @@ int main()
   zab = new ZabImpl(cb, comm, tm, ss.str());
   zab->Startup();
   while (1) {
-    if (DMA_RecFifoPollNormalFifoById(1, 0, 1, 0, rec_fifo) < 0) {
-      throw std::runtime_error("DMA_RecFifoPollNormalFifoById Failed!");
-    }
     comm.Dispatch();
     tm.Dispatch();
   }
