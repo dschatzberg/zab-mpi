@@ -143,10 +143,12 @@ public:
       throw std::runtime_error("DMA_RecFifoGetFifoGroup Failed!");
     }
 
-    posix_memalign(reinterpret_cast<void**>(&rec_fifo_data_), 32, DMA_MIN_REC_FIFO_SIZE_IN_BYTES);
+    posix_memalign(reinterpret_cast<void**>(&rec_fifo_data_), 32,
+                   DMA_MIN_REC_FIFO_SIZE_IN_BYTES);
     if (DMA_RecFifoInitById(rec_fifo_, 0,
                             rec_fifo_data_, rec_fifo_data_,
-                            static_cast<char*>(rec_fifo_data_)+ DMA_MIN_REC_FIFO_SIZE_IN_BYTES) != 0) {
+                            static_cast<char*>(rec_fifo_data_) +
+                            DMA_MIN_REC_FIFO_SIZE_IN_BYTES) != 0) {
       throw std::runtime_error("DMA_RecFifoInitById Failed!");
     }
 
@@ -163,7 +165,8 @@ public:
       throw std::runtime_error("DMA_InjFifoGroupAllocate Failed!");
     }
 
-    posix_memalign(reinterpret_cast<void**>(&inj_fifo_data_), 32, DMA_MIN_INJ_FIFO_SIZE_IN_BYTES);
+    posix_memalign(reinterpret_cast<void**>(&inj_fifo_data_), 32,
+                   DMA_MIN_INJ_FIFO_SIZE_IN_BYTES);
     if (DMA_InjFifoInitById(&inj_fifo_, 0, inj_fifo_data_,
                             inj_fifo_data_,
                             static_cast<char*>(inj_fifo_data_) +
@@ -186,7 +189,8 @@ public:
     buf_size_ = 64;
     posix_memalign(reinterpret_cast<void**>(&buf_), 16, 64);
     DMA_CounterSetBaseById(&inj_group_, 0, buf_);
-    DMA_CounterSetMaxById(&inj_group_, 0, static_cast<char*>(buf_) + buf_size_);
+    DMA_CounterSetMaxById(&inj_group_, 0,
+                          static_cast<char*>(buf_) + buf_size_);
     if ((function_id_ = DMA_RecFifoRegisterRecvFunction(recv_function,
                                                        this, 0, 0)) < 0) {
       throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
@@ -245,9 +249,14 @@ public:
       throw std::runtime_error("DMA_RecFifoPollNormalFifoById Failed!");
     }
     if (_bgp_TreeReadyToReceiveVC0()) {
-      _bgp_TreeRawReceivePacketVC0_sh(&rcv_hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_), bcast_rcv_mem_);
-      if (reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 != rank_) {
-        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_), reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg1));
+      _bgp_TreeRawReceivePacketVC0_sh
+        (&rcv_hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_),
+         bcast_rcv_mem_);
+      if (reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 !=
+          rank_) {
+        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_),
+                                  reinterpret_cast<_BGPTreePacketSoftHeader*>
+                                  (rcv_sh_)->arg1));
       }
     }
   }
@@ -257,8 +266,11 @@ private:
       throw std::runtime_error("Unsupported message size!");
     }
     message.copy(static_cast<char*>(bcast_mem_), message.length());
-    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 = message.length();
-    _bgp_TreeRawSendPacketVC0_sh(&hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
+    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 =
+      message.length();
+    _bgp_TreeRawSendPacketVC0_sh
+      (&hdr_,
+       reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
   }
   void SendToRank(int rank, const std::string& message) {
 
@@ -280,7 +292,8 @@ private:
       free(buf_);
       posix_memalign(reinterpret_cast<void**>(buf_), 16, buf_size_);
       DMA_CounterSetBaseById(&inj_group_, 0, buf_);
-      DMA_CounterSetMaxById(&inj_group_, 0, static_cast<char*>(buf_) + buf_size_);
+      DMA_CounterSetMaxById(&inj_group_, 0,
+                            static_cast<char*>(buf_) + buf_size_);
     }
     message.copy(static_cast<char*>(buf_), message.length());
     DMA_CounterSetValueById(&inj_group_, 0, message.size());
