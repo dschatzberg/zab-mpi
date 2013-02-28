@@ -15,13 +15,14 @@
 #include "ZabImpl.hpp"
 
 namespace {
-  const uint64_t NUM_WRITES = 10000;
+  const uint64_t NUM_WRITES = 1000;
 }
 class ZabCallbackImpl : public ZabCallback {
 public:
   ZabCallbackImpl(ZabImpl*& zab, TimerManager& tm, const std::string& id) :
     zab_(zab), tm_(tm), cb_(*this), id_(id),
-    count_(0), old_mean_(0), old_s_(0), new_mean_(0), new_s_(0)
+    count_(0), old_mean_(0), old_s_(0), new_mean_(0), new_s_(0),
+    max_(0)
   {
     timer_ = tm_.Alloc(&cb_);
   }
@@ -30,6 +31,7 @@ public:
     count_++;
     if (status_ == LEADING) {
       uint64_t val = _bgp_GetTimeBase() - time_;
+      max_ = std::max(max_, val);
       if (count_ == 1) {
         old_mean_ = new_mean_ = val;
         old_s_ = 0.0;
@@ -41,13 +43,14 @@ public:
         old_s_ = new_s_;
       }
       if (count_ < NUM_WRITES) {
-        tm_.Arm(timer_, 1000000);
+        tm_.Arm(timer_, 10000000);
       } else {
         std::cout << "Latency = " << new_mean_ << ", variance = " <<
-          new_s_/(count_ - 1) << std::endl;
+          new_s_/(count_ - 1) << ", max = " << max_ << std::endl;
       }
     }
     if (count_ >= NUM_WRITES) {
+      GlobInt_Barrier(0, NULL, NULL);
       exit(0);
     }
   }
@@ -58,7 +61,7 @@ public:
       std::cout << id_ << ": Elected " << *leader << std::endl;
     }
     if (status == LEADING) {
-      tm_.Arm(timer_, 850000000);
+      tm_.Arm(timer_, 8500000000ULL);
     }
   }
 private:
@@ -88,6 +91,7 @@ private:
   double old_s_;
   double new_mean_;
   double new_s_;
+  uint64_t max_;
 };
 
 int recv_function(DMA_RecFifo_t* f_ptr,
@@ -143,8 +147,8 @@ public:
       throw std::runtime_error("DMA_RecFifoGetFifoGroup Failed!");
     }
 
-    posix_memalign(reinterpret_cast<void**>(&rec_fifo_data_), 32,
-                   DMA_MIN_REC_FIFO_SIZE_IN_BYTES);
+    posix_memalign(&rec_fifo_data_, 32,
+                   8*DMA_MIN_REC_FIFO_SIZE_IN_BYTES);
     if (DMA_RecFifoInitById(rec_fifo_, 0,
                             rec_fifo_data_, rec_fifo_data_,
                             static_cast<char*>(rec_fifo_data_) +
@@ -165,7 +169,7 @@ public:
       throw std::runtime_error("DMA_InjFifoGroupAllocate Failed!");
     }
 
-    posix_memalign(reinterpret_cast<void**>(&inj_fifo_data_), 32,
+    posix_memalign(&inj_fifo_data_, 32,
                    DMA_MIN_INJ_FIFO_SIZE_IN_BYTES);
     if (DMA_InjFifoInitById(&inj_fifo_, 0, inj_fifo_data_,
                             inj_fifo_data_,
@@ -187,7 +191,7 @@ public:
     DMA_CounterSetValueById(&inj_group_, 0, 0);
 
     buf_size_ = 64;
-    posix_memalign(reinterpret_cast<void**>(&buf_), 16, 64);
+    posix_memalign(&buf_, 16, 64);
     DMA_CounterSetBaseById(&inj_group_, 0, buf_);
     DMA_CounterSetMaxById(&inj_group_, 0,
                           static_cast<char*>(buf_) + buf_size_);
@@ -204,7 +208,8 @@ public:
       throw std::runtime_error("Tree receive packet allocation failed!");
     }
     _bgp_TreeMakeBcastHdr(&hdr_, 1, 0);
-    if (posix_memalign(&tree_sh_, 16, sizeof(_BGPTreePacketSoftHeader)) != 0) {
+    if (posix_memalign(&tree_sh_, 16,
+                       sizeof(_BGPTreePacketSoftHeader)) != 0) {
       perror("posix_memalign");
       throw std::runtime_error("Tree receive packet allocation failed!");
     }
@@ -212,7 +217,7 @@ public:
       perror("posix_memalign");
       throw std::runtime_error("Tree receive packet allocation failed!");
     }
-    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg0 = rank_;
+    static_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg0 = rank_;
   }
   virtual void Broadcast(const std::string& message)
   {
@@ -250,13 +255,18 @@ public:
     }
     if (_bgp_TreeReadyToReceiveVC0()) {
       _bgp_TreeRawReceivePacketVC0_sh
-        (&rcv_hdr_, reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_),
+        (&rcv_hdr_, static_cast<_BGPTreePacketSoftHeader*>(rcv_sh_),
          bcast_rcv_mem_);
-      if (reinterpret_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 !=
+      if (static_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 !=
           rank_) {
+        try {
         zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_),
-                                  reinterpret_cast<_BGPTreePacketSoftHeader*>
+                                  static_cast<_BGPTreePacketSoftHeader*>
                                   (rcv_sh_)->arg1));
+        } catch (...) {
+          std::cerr << "Exception thrown on tree receive" << std::endl;
+          throw;
+        }
       }
     }
   }
@@ -266,11 +276,11 @@ private:
       throw std::runtime_error("Unsupported message size!");
     }
     message.copy(static_cast<char*>(bcast_mem_), message.length());
-    reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 =
+    static_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 =
       message.length();
     _bgp_TreeRawSendPacketVC0_sh
       (&hdr_,
-       reinterpret_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
+       static_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
   }
   void SendToRank(int rank, const std::string& message) {
 
@@ -290,7 +300,7 @@ private:
     if (message.length() > buf_size_) {
       buf_size_ = message.length();
       free(buf_);
-      posix_memalign(reinterpret_cast<void**>(buf_), 16, buf_size_);
+      posix_memalign(&buf_, 16, buf_size_);
       DMA_CounterSetBaseById(&inj_group_, 0, buf_);
       DMA_CounterSetMaxById(&inj_group_, 0,
                             static_cast<char*>(buf_) + buf_size_);
@@ -300,16 +310,14 @@ private:
     DMA_CounterSetEnableById(&inj_group_, 0);
 
     DMA_InjDescriptor_t desc;
-    if (DMA_TorusMemFifoDescriptor(
-                                   &desc,
+    if (DMA_TorusMemFifoDescriptor(&desc,
                                    x, y, z, 0, 0,
                                    2, message.size(), function_id_, 0, 0, 0,
                                    message.size()) != 0) {
       throw std::runtime_error("DMA_TorusMemFifoDescriptor Failed!");
     }
 
-    if (DMA_InjFifoInjectDescriptorById(
-                                        &inj_fifo_, 0, &desc) != 1) {
+    if (DMA_InjFifoInjectDescriptorById(&inj_fifo_, 0, &desc) != 1) {
       throw std::runtime_error("DMA_InjFifoInjectDescriptorById Failed!");
     }
   }
@@ -341,8 +349,13 @@ int recv_function(DMA_RecFifo_t* f_ptr,
                   char* payload_ptr,
                   int payload_bytes)
 {
-  BGCommunicator* comm = reinterpret_cast<BGCommunicator*>(recv_func_param);
-  comm->zab_->Receive(std::string(payload_ptr, packet_ptr->SW_Arg));
+  BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
+  try {
+    comm->zab_->Receive(std::string(payload_ptr, packet_ptr->SW_Arg));
+  } catch (...) {
+    std::cerr << "Exception thrown on tree receive" << std::endl;
+    throw;
+  }
   return 0;
 }
 

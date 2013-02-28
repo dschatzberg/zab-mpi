@@ -5,7 +5,7 @@
 #include "QuorumPeer.hpp"
 
 namespace {
-  const long RECOVER_CYCLES = 425000000;
+  const uint64_t RECOVER_CYCLES = 4250000000ULL;
 }
 
 Leader::Leader(QuorumPeer& self, Log& log,

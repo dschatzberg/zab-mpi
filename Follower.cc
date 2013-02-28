@@ -3,7 +3,7 @@
 #include "QuorumPeer.hpp"
 
 namespace {
-  const long RECOVER_CYCLES = 850000000;
+  const uint64_t RECOVER_CYCLES = 8500000000ULL;
 }
 
 Follower::Follower(QuorumPeer& self, Log& log, TimerManager& tm,
