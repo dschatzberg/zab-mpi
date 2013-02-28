@@ -55,7 +55,7 @@ public:
   {
     status_ = status;
     if (status != LOOKING) {
-      //std::cout << id_ << ": Elected " << *leader << std::endl;
+      std::cout << id_ << ": Elected " << *leader << std::endl;
     }
     if (status == LEADING) {
       tm_.Arm(timer_, 850000000);

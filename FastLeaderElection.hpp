@@ -6,17 +6,21 @@
 #include <map>
 
 #include "Message.pb.h"
+#include "Zab.hpp"
 
 class ReliableFifoCommunicator;
 class QuorumPeer;
 class Log;
 
-class FastLeaderElection {
+class FastLeaderElection : public TimerManager::TimerCallback {
 public:
   FastLeaderElection(QuorumPeer& self,
-                     Log& log, const std::string& id);
+                     Log& log,
+                     TimerManager& tm,
+                     const std::string& id);
   void LookForLeader();
   void Receive(const Message::Vote& v);
+  void Callback();
 private:
   void SendVote();
   bool UpdateVote(const Message::Vote& v);
@@ -25,8 +29,11 @@ private:
 
   QuorumPeer& self_;
   Log& log_;
+  TimerManager& tm_;
   uint32_t epoch_;
   Message vote_;
+  int timer_;
+  bool waiting_;
 
   class Vote {
   public:
@@ -50,21 +57,6 @@ private:
 
   std::map<std::string, Vote> received_votes_;
   std::map<std::string, Vote> out_of_election_;
-//   void Receive(const Vote& v);
-// private:
-//   typedef std::map<PeerId, Vote> VoteMap;
-//   void addVote(const Vote& v);
-//   bool updateVote(Vote& ours, const Vote& theirs);
-//   bool haveQuorum(const Vote& v, const VoteMap& map);
-//   bool checkLeader(PeerId leader, const VoteMap& map);
-
-//   QuorumPeer& self_;
-//   Vote vote_;
-//   //FIXME: Use c++11 unordered_map
-//   VoteMap receivedVotes_;
-//   VoteMap outOfElection_;
-//   uint32_t epoch_;
-//   //TimeoutDesc timeout_;
 };
 
 #endif

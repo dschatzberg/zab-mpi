@@ -6,7 +6,7 @@
 ZabImpl::ZabImpl(ZabCallback& cb, ReliableFifoCommunicator& comm,
                  TimerManager& tm, const std::string& id)
   : peer_(*this), cb_(cb), comm_(comm), tm_(tm), id_(id), status_(LOOKING),
-    log_(cb_), fle_(peer_, log_, id_), leader_(peer_, log_, tm_, id_),
+    log_(cb_), fle_(peer_, log_, tm_, id_), leader_(peer_, log_, tm_, id_),
     follower_(peer_, log_, tm_, id_)
 {
 }
