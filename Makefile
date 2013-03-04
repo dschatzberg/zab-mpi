@@ -1,16 +1,30 @@
 SRCFILES := \
+	AckNewLeader.pb.cc \
+	Commit.pb.cc \
+	Entry.pb.cc \
 	FastLeaderElection.cc \
 	Follower.cc \
+	FollowerInfo.pb.cc \
 	Leader.cc \
 	Log.cc \
-	Message.pb.cc \
+	NewLeaderInfo.pb.cc \
+	ProposalAck.pb.cc \
+	Proposal.pb.cc \
+	Vote.pb.cc \
 	ZabImpl.cc
 HDRFILES := \
+	AckNewLeader.pb.h \
+	Commit.pb.h \
+	Entry.pb.h \
 	FastLeaderElection.hpp \
 	Follower.hpp \
+	FollowerInfo.pb.h \
 	Leader.hpp \
 	Log.hpp \
-	Message.pb.h \
+	NewLeaderInfo.pb.h \
+	ProposalAck.pb.h \
+	Proposal.pb.h \
+	Vote.pb.h \
 	Zab.hpp \
 	ZabImpl.hpp
 

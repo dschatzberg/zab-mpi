@@ -1,0 +1,4 @@
+message AckNewLeader {
+  required bytes from = 1;
+  repeated uint64 zxids = 2;
+}

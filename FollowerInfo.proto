@@ -1,0 +1,4 @@
+message FollowerInfo {
+  required bytes from = 1;
+  required uint64 zxid = 2;
+}

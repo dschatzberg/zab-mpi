@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "Message.pb.h"
 #include "Zab.hpp"
 
 class Log;
@@ -15,23 +14,9 @@ public:
   Follower(QuorumPeer& self, Log& log, TimerManager& tm, const std::string& id);
   virtual void Callback();
   void Recover(const std::string& leader);
-  void Receive(const Message::NewLeaderInfo& nli);
-  void Receive(const Message::Entry& proposal);
-  void Receive(uint64_t zxid);
-  // void receiveLeader(const NewLeaderInfo& info);
-  // void receiveDiff(const std::vector<Commit>& diff);
-  // void receiveTruncate(const Trunc& trunc);
-  // void receiveProposal(const Proposal& p);
-  // void receiveCommit(const CommitMsg& cm);
-  // class Info {
-  // public:
-  //   Info() {}
-  //   Info(PeerId from, Zxid zxid) : from_(from), lastZxid_(zxid) {}
-  //   friend std::ostream& operator<<(std::ostream& stream, const Info& info);
-
-  //   PeerId from_;
-  //   Zxid lastZxid_;
-  // };
+  void Receive(const NewLeaderInfo& nli);
+  void Receive(const Proposal& p);
+  void Receive(const Commit& c);
 private:
   QuorumPeer& self_;
   Log& log_;
@@ -40,9 +25,9 @@ private:
   std::string leader_;
   bool following_;
   bool recovering_;
-  Message message_;
-  Message ack_;
-  Message ack_propose_;
+  FollowerInfo fi_;
+  AckNewLeader anl_;
+  ProposalAck pa_;
 };
 
 #endif

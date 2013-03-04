@@ -14,15 +14,27 @@ public:
           const std::string& id);
   virtual uint64_t Propose(const std::string& message);
   virtual void Startup();
-  virtual void Receive(const std::string& message);
+  virtual void Receive(const Vote& v);
+  virtual void Receive(const FollowerInfo& fi);
+  virtual void Receive(const NewLeaderInfo& nli);
+  virtual void Receive(const AckNewLeader& anl);
+  virtual void Receive(const Proposal& p);
+  virtual void Receive(const ProposalAck& pa);
+  virtual void Receive(const Commit& c);
 private:
   void LookForLeader();
 
   class Peer : public QuorumPeer {
   public:
     Peer(ZabImpl& zab) : zab_(zab) {}
-    virtual void Send(const std::string& dest, const Message& message);
-    virtual void Broadcast(const Message& message);
+    virtual void Send(const std::string& to, const Vote& v);
+    virtual void Send(const std::string& to, const FollowerInfo& fi);
+    virtual void Send(const std::string& to, const AckNewLeader& anl);
+    virtual void Send(const std::string& to, const ProposalAck& pa);
+    virtual void Send(const std::string& to, const NewLeaderInfo& nli);
+    virtual void Broadcast(const Vote& v);
+    virtual void Broadcast(const Proposal& p);
+    virtual void Broadcast(const Commit& c);
     virtual void Elected(const std::string& leader, uint64_t zxid);
     virtual void Ready();
     virtual void Fail();

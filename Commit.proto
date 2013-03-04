@@ -1,0 +1,3 @@
+message Commit {
+  required uint64 zxid = 1;
+}

@@ -24,40 +24,75 @@ ZabImpl::Propose(const std::string& message)
 }
 
 void
-ZabImpl::Receive(const std::string& message)
+ZabImpl::Receive(const Vote& v)
 {
-  Message m;
-  bool foo = m.ParseFromString(message);
-  if(!foo) {
-    throw std::runtime_error("Failed to parse message!");
-  }
 #ifdef LOG
-  std::cout << id_ << ": Received: " << m.DebugString();
+  std::cout << id_ << " Receive Vote: " <<
+    v.ShortDebugString() << std::endl;
 #endif
-  switch(m.type()) {
-  case Message::VOTE:
-    fle_.Receive(m.vote());
-    break;
-  case Message::FOLLOWERINFO:
-    leader_.Receive(m.follower_info());
-    break;
-  case Message::NEWLEADERINFO:
-    follower_.Receive(m.new_leader_info());
-    break;
-  case Message::ACKNEWLEADER:
-    leader_.ReceiveAckNewLeader(m);
-    break;
-  case Message::PROPOSAL:
-    follower_.Receive(m.proposal());
-    break;
-  case Message::ACKPROPOSAL:
-    leader_.Receive(m.ack_zxid());
-    break;
-  case Message::COMMIT:
-    follower_.Receive(m.commit_zxid());
-    break;
-  }
+  fle_.Receive(v);
 }
+
+void
+ZabImpl::Receive(const FollowerInfo& fi)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive FollowerInfo: " <<
+    fi.ShortDebugString() << std::endl;
+#endif
+  leader_.Receive(fi);
+}
+
+void
+ZabImpl::Receive(const NewLeaderInfo& nli)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive NewLeaderInfo: " <<
+    nli.ShortDebugString() << std::endl;
+#endif
+  follower_.Receive(nli);
+}
+
+void
+ZabImpl::Receive(const AckNewLeader& anl)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive AckNewLeader: " <<
+    anl.ShortDebugString() << std::endl;
+#endif
+  leader_.Receive(anl);
+}
+
+void
+ZabImpl::Receive(const Proposal& p)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive Proposal: " <<
+    p.ShortDebugString() << std::endl;
+#endif
+  follower_.Receive(p);
+}
+
+void
+ZabImpl::Receive(const ProposalAck& pa)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive ProposalAck: " <<
+    pa.ShortDebugString() << std::endl;
+#endif
+  leader_.Receive(pa);
+}
+
+void
+ZabImpl::Receive(const Commit& c)
+{
+#ifdef LOG
+  std::cout << id_ << " Receive Commit: " <<
+    c.ShortDebugString() << std::endl;
+#endif
+  follower_.Receive(c);
+}
+
 
 void
 ZabImpl::Peer::Elected(const std::string& leader, uint64_t zxid)
@@ -103,25 +138,82 @@ ZabImpl::LookForLeader()
 }
 
 void
-ZabImpl::Peer::Send(const std::string& id, const Message& message)
+ZabImpl::Peer::Send(const std::string& to, const Vote& v)
 {
 #ifdef LOG
-  std::cout << zab_.id_ << ": Sending Message to " << id << ": " << message.DebugString();
+  std::cout << zab_.id_ << " Send Vote: " << v.ShortDebugString() << std::endl;
 #endif
-  std::string str;
-  message.SerializeToString(&str);
-  zab_.comm_.Send(id, str);
+  zab_.comm_.Send(to, v);
 }
 
 void
-ZabImpl::Peer::Broadcast(const Message& message)
+ZabImpl::Peer::Send(const std::string& to, const FollowerInfo& fi)
 {
 #ifdef LOG
-  std::cout << zab_.id_ << ": Broadcasting Message: " << message.DebugString();
+  std::cout << zab_.id_ << " Send FollowerInfo: " <<
+    fi.ShortDebugString() << std::endl;
 #endif
-  std::string str;
-  message.SerializeToString(&str);
-  zab_.comm_.Broadcast(str);
+  zab_.comm_.Send(to, fi);
+}
+
+void
+ZabImpl::Peer::Send(const std::string& to, const AckNewLeader& anl)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << " Send AckNewLeader: " <<
+    anl.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Send(to, anl);
+}
+
+void
+ZabImpl::Peer::Send(const std::string& to, const ProposalAck& pa)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << " Send ProposalAck: " <<
+    pa.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Send(to, pa);
+}
+
+void
+ZabImpl::Peer::Send(const std::string& to, const NewLeaderInfo& nli)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << " Send NewLeaderInfo: " <<
+    nli.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Send(to, nli);
+}
+
+void
+ZabImpl::Peer::Broadcast(const Vote& v)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << "Broadcast Vote: " <<
+    v.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Broadcast(v);
+}
+
+void
+ZabImpl::Peer::Broadcast(const Proposal& p)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << "Broadcast Proposal: " <<
+    p.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Broadcast(p);
+}
+
+void
+ZabImpl::Peer::Broadcast(const Commit& c)
+{
+#ifdef LOG
+  std::cout << zab_.id_ << "Broadcast Commit: " <<
+    c.ShortDebugString() << std::endl;
+#endif
+  zab_.comm_.Broadcast(c);
 }
 
 void

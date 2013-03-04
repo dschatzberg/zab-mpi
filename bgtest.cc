@@ -94,19 +94,59 @@ private:
   uint64_t max_;
 };
 
-int recv_function(DMA_RecFifo_t* f_ptr,
-                  DMA_PacketHeader_t* packet_ptr,
-                  void* recv_func_param,
-                  char* payload_ptr,
-                  int payload_bytes);
+int vote_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes);
+int fi_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes);
+int anl_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes);
+int pa_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes);
+int nli_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes);
 
 class BGCommunicator : public ReliableFifoCommunicator {
 public:
-  friend int recv_function(DMA_RecFifo_t* f_ptr,
-                           DMA_PacketHeader_t* packet_ptr,
-                           void* recv_func_param,
-                           char* payload_ptr,
-                           int payload_bytes);
+  friend int vote_recv_function(DMA_RecFifo_t* f_ptr,
+                                DMA_PacketHeader_t* packet_ptr,
+                                void* recv_func_param,
+                                char* payload_ptr,
+                                int payload_bytes);
+  friend int fi_recv_function(DMA_RecFifo_t* f_ptr,
+                              DMA_PacketHeader_t* packet_ptr,
+                              void* recv_func_param,
+                              char* payload_ptr,
+                              int payload_bytes);
+  friend int anl_recv_function(DMA_RecFifo_t* f_ptr,
+                               DMA_PacketHeader_t* packet_ptr,
+                               void* recv_func_param,
+                               char* payload_ptr,
+                               int payload_bytes);
+  friend int pa_recv_function(DMA_RecFifo_t* f_ptr,
+                              DMA_PacketHeader_t* packet_ptr,
+                              void* recv_func_param,
+                              char* payload_ptr,
+                              int payload_bytes);
+  friend int nli_recv_function(DMA_RecFifo_t* f_ptr,
+                               DMA_PacketHeader_t* packet_ptr,
+                               void* recv_func_param,
+                               char* payload_ptr,
+                               int payload_bytes);
   BGCommunicator(ZabImpl*& zab) : zab_(zab)
   {
     _BGP_Personality_t pers;
@@ -195,8 +235,29 @@ public:
     DMA_CounterSetBaseById(&inj_group_, 0, buf_);
     DMA_CounterSetMaxById(&inj_group_, 0,
                           static_cast<char*>(buf_) + buf_size_);
-    if ((function_id_ = DMA_RecFifoRegisterRecvFunction(recv_function,
-                                                       this, 0, 0)) < 0) {
+    if ((vote_function_id_ =
+         DMA_RecFifoRegisterRecvFunction(vote_recv_function,
+                                         this, 0, 0)) < 0) {
+      throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
+    }
+    if ((fi_function_id_ =
+         DMA_RecFifoRegisterRecvFunction(fi_recv_function,
+                                         this, 0, 0)) < 0) {
+      throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
+    }
+    if ((anl_function_id_ =
+         DMA_RecFifoRegisterRecvFunction(anl_recv_function,
+                                         this, 0, 0)) < 0) {
+      throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
+    }
+    if ((pa_function_id_ =
+         DMA_RecFifoRegisterRecvFunction(pa_recv_function,
+                                         this, 0, 0)) < 0) {
+      throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
+    }
+    if ((nli_function_id_ =
+         DMA_RecFifoRegisterRecvFunction(nli_recv_function,
+                                         this, 0, 0)) < 0) {
       throw std::runtime_error("DMA_RecFifoRegisterRecvFunction Failed!");
     }
     if (posix_memalign(&bcast_mem_, 16, 256) != 0) {
@@ -219,20 +280,91 @@ public:
     }
     static_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg0 = rank_;
   }
-  virtual void Broadcast(const std::string& message)
+  virtual void Send(const std::string& to, const Vote& v)
+  {
+    std::string str;
+    if (!v.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize a Vote");
+    }
+    Send(to, str, vote_function_id_);
+  }
+  virtual void Send(const std::string& to, const FollowerInfo& fi)
+  {
+    std::string str;
+    if (!fi.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize a FollowerInfo");
+    }
+    Send(to, str, fi_function_id_);
+  }
+  virtual void Send(const std::string& to, const AckNewLeader& anl)
+  {
+    std::string str;
+    if (!anl.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize an AckNewLeader");
+    }
+    Send(to, str, anl_function_id_);
+  }
+  virtual void Send(const std::string& to, const ProposalAck& pa)
+  {
+    std::string str;
+    if (!pa.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize an ProposalAck");
+    }
+    Send(to, str, pa_function_id_);
+  }
+  virtual void Send(const std::string& to, const NewLeaderInfo& nli)
+  {
+    std::string str;
+    if (!nli.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize an NewLeaderInfo");
+    }
+    Send(to, str, nli_function_id_);
+  }
+  enum broadcast_t {
+    VOTE,
+    PROPOSAL,
+    COMMIT
+  };
+  virtual void Broadcast(const Vote& v)
+  {
+    std::string str;
+    if (!v.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize a Vote");
+    }
+    Broadcast(str, VOTE);
+  }
+  virtual void Broadcast(const Proposal& p)
+  {
+    std::string str;
+    if (!p.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize a Proposal");
+    }
+    Broadcast(str, PROPOSAL);
+  }
+  virtual void Broadcast(const Commit& c)
+  {
+    std::string str;
+    if (!c.SerializeToString(&str)) {
+      throw std::runtime_error("Failed to serialize a Commit");
+    }
+    Broadcast(str, COMMIT);
+  }
+
+  virtual void Broadcast(const std::string& message, broadcast_t type)
   {
     if (_bgp_TreeOkToSendVC0()) {
-      BcastNoCheck(message);
+      BcastNoCheck(message, type);
     } else {
-      bcast_queue_.push(message);
+      bcast_queue_.push(std::make_pair(message, type));
     }
   }
-  virtual void Send(const std::string& to, const std::string& message)
+  virtual void Send(const std::string& to, const std::string& message,
+                    int function_id)
   {
     int rank;
     std::stringstream ss(to);
     ss >> rank;
-    SendToRank(rank, message);
+    SendToRank(rank, message, function_id);
   }
   virtual uint32_t Size()
   {
@@ -241,13 +373,13 @@ public:
   void Dispatch()
   {
     if (!queue_.empty() && DMA_CounterGetValueById(&inj_group_, 0) == 0) {
-      std::pair<int, std::string>& to_send = queue_.front();
-      SendNoCheck(to_send.first, to_send.second);
+      std::pair<int, std::pair<std::string, int> >& to_send = queue_.front();
+      SendNoCheck(to_send.first, to_send.second.first, to_send.second.second);
       queue_.pop();
     }
     if (!bcast_queue_.empty() && _bgp_TreeOkToSendVC0()) {
-      std::string& to_send = bcast_queue_.front();
-      BcastNoCheck(to_send);
+      std::pair<std::string, broadcast_t>& to_send = bcast_queue_.front();
+      BcastNoCheck(to_send.first, to_send.second);
       bcast_queue_.pop();
     }
     if (DMA_RecFifoPollNormalFifoById(1, 0, 1, 0, rec_fifo_) < 0) {
@@ -259,38 +391,59 @@ public:
          bcast_rcv_mem_);
       if (static_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg0 !=
           rank_) {
-        try {
-        zab_->Receive(std::string(static_cast<char*>(bcast_rcv_mem_),
-                                  static_cast<_BGPTreePacketSoftHeader*>
-                                  (rcv_sh_)->arg1));
-        } catch (...) {
-          std::cerr << "Exception thrown on tree receive" << std::endl;
-          throw;
+        std::string str(static_cast<char*>(bcast_rcv_mem_),
+                        static_cast<_BGPTreePacketSoftHeader*>
+                        (rcv_sh_)->arg1);
+        Vote v;
+        Proposal p;
+        Commit c;
+        switch (static_cast<broadcast_t>
+                (static_cast<_BGPTreePacketSoftHeader*>(rcv_sh_)->arg2)) {
+        case VOTE:
+          if (!v.ParseFromString(str)) {
+            throw std::runtime_error("Failed to parse Vote");
+          }
+          zab_->Receive(v);
+          break;
+        case PROPOSAL:
+          if (!p.ParseFromString(str)) {
+            throw std::runtime_error("Failed to parse Proposal");
+          }
+          zab_->Receive(p);
+          break;
+        case COMMIT:
+          if (!c.ParseFromString(str)) {
+            throw std::runtime_error("Failed to parse Commit");
+          }
+          zab_->Receive(c);
+          break;
         }
       }
     }
   }
 private:
-  void BcastNoCheck(const std::string& message) {
+  void BcastNoCheck(const std::string& message, broadcast_t type) {
     if (message.length() > 256) {
       throw std::runtime_error("Unsupported message size!");
     }
     message.copy(static_cast<char*>(bcast_mem_), message.length());
     static_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg1 =
       message.length();
+    static_cast<_BGPTreePacketSoftHeader*>(tree_sh_)->arg2 =
+      type;
     _bgp_TreeRawSendPacketVC0_sh
       (&hdr_,
        static_cast<_BGPTreePacketSoftHeader*>(tree_sh_), bcast_mem_);
   }
-  void SendToRank(int rank, const std::string& message) {
+  void SendToRank(int rank, const std::string& message, int function_id) {
 
     if (DMA_CounterGetValueById(&inj_group_, 0) != 0 || !queue_.empty()) {
-      queue_.push(std::make_pair(rank, message));
+      queue_.push(std::make_pair(rank, std::make_pair(message, function_id)));
     } else {
-      SendNoCheck(rank, message);
+        SendNoCheck(rank, message, function_id);
     }
   }
-  void SendNoCheck(int rank, const std::string& message) {
+  void SendNoCheck(int rank, const std::string& message, int function_id) {
     uint32_t x, y, z, t;
     if (Kernel_Rank2Coord(rank, &x, &y, &z, &t) != 0) {
       throw std::runtime_error("Kernel_Rank2Coord Failed!");
@@ -312,7 +465,7 @@ private:
     DMA_InjDescriptor_t desc;
     if (DMA_TorusMemFifoDescriptor(&desc,
                                    x, y, z, 0, 0,
-                                   2, message.size(), function_id_, 0, 0, 0,
+                                   2, message.size(), function_id, 0, 0, 0,
                                    message.size()) != 0) {
       throw std::runtime_error("DMA_TorusMemFifoDescriptor Failed!");
     }
@@ -325,7 +478,11 @@ private:
   std::string id_;
   unsigned rank_;
   unsigned size_;
-  int function_id_;
+  int vote_function_id_;
+  int fi_function_id_;
+  int anl_function_id_;
+  int pa_function_id_;
+  int nli_function_id_;
   DMA_CounterGroup_t inj_group_;
   DMA_InjFifoGroup_t inj_fifo_;
   void* inj_fifo_data_;
@@ -335,27 +492,91 @@ private:
   void* buf_;
   unsigned buf_size_;
   DMA_RecFifoGroup_t* rec_fifo_;
-  std::queue<std::pair<int, std::string> > queue_;
-  std::queue<std::string> bcast_queue_;
+  std::queue<std::pair<int, std::pair<std::string, int> > > queue_;
+  std::queue<std::pair<std::string, broadcast_t> > bcast_queue_;
   _BGP_TreeHwHdr hdr_;
   _BGP_TreeHwHdr rcv_hdr_;
   void* tree_sh_;
   void* rcv_sh_;
 };
 
-int recv_function(DMA_RecFifo_t* f_ptr,
-                  DMA_PacketHeader_t* packet_ptr,
-                  void* recv_func_param,
-                  char* payload_ptr,
-                  int payload_bytes)
+int vote_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes)
 {
   BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
-  try {
-    comm->zab_->Receive(std::string(payload_ptr, packet_ptr->SW_Arg));
-  } catch (...) {
-    std::cerr << "Exception thrown on tree receive" << std::endl;
-    throw;
+  std::string str(payload_ptr, packet_ptr->SW_Arg);
+  Vote v;
+  if (!v.ParseFromString(str)) {
+    throw std::runtime_error("Failed to parse Vote");
   }
+  comm->zab_->Receive(v);
+  return 0;
+}
+
+int fi_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes)
+{
+  BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
+  std::string str(payload_ptr, packet_ptr->SW_Arg);
+  FollowerInfo fi;
+  if (!fi.ParseFromString(str)) {
+    throw std::runtime_error("Failed to parse FollowerInfo");
+  }
+  comm->zab_->Receive(fi);
+  return 0;
+}
+
+int anl_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes)
+{
+  BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
+  std::string str(payload_ptr, packet_ptr->SW_Arg);
+  AckNewLeader anl;
+  if (!anl.ParseFromString(str)) {
+    throw std::runtime_error("Failed to parse AckNewLeader");
+  }
+  comm->zab_->Receive(anl);
+  return 0;
+}
+
+int pa_recv_function(DMA_RecFifo_t* f_ptr,
+                       DMA_PacketHeader_t* packet_ptr,
+                       void* recv_func_param,
+                       char* payload_ptr,
+                       int payload_bytes)
+{
+  BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
+  std::string str(payload_ptr, packet_ptr->SW_Arg);
+  ProposalAck pa;
+  if (!pa.ParseFromString(str)) {
+    throw std::runtime_error("Failed to parse ProposalAck");
+  }
+  comm->zab_->Receive(pa);
+  return 0;
+}
+
+int nli_recv_function(DMA_RecFifo_t* f_ptr,
+                      DMA_PacketHeader_t* packet_ptr,
+                      void* recv_func_param,
+                      char* payload_ptr,
+                      int payload_bytes)
+{
+  BGCommunicator* comm = static_cast<BGCommunicator*>(recv_func_param);
+  std::string str(payload_ptr, packet_ptr->SW_Arg);
+  NewLeaderInfo nli;
+  if (!nli.ParseFromString(str)) {
+    throw std::runtime_error("Failed to parse NewLeaderInfo");
+  }
+  comm->zab_->Receive(nli);
   return 0;
 }
 

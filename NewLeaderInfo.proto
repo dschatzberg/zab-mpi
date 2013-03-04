@@ -1,0 +1,12 @@
+import "Entry.proto";
+
+message NewLeaderInfo {
+  required bytes from = 1;
+  required uint64 zxid = 2;
+  enum RecoverType {
+    DIFF = 1;
+  }
+  required RecoverType type = 3;
+  repeated Entry commit_diff = 4;
+  repeated Entry propose_diff = 5;
+}

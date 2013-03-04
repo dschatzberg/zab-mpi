@@ -1,0 +1,16 @@
+message Vote {
+  required bytes from = 1;
+
+  required bytes leader = 2;
+
+  required uint64 zxid = 3;
+
+  required uint32 epoch = 4;
+
+  enum ZabStatus {
+    LOOKING = 1;
+    FOLLOWING = 2;
+    LEADING = 3;
+  }
+  required ZabStatus status = 5;
+}

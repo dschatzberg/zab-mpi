@@ -1,6 +1,5 @@
 #include "FastLeaderElection.hpp"
 #include "Log.hpp"
-#include "Message.pb.h"
 #include "QuorumPeer.hpp"
 #include "Zab.hpp"
 
@@ -15,18 +14,17 @@ FastLeaderElection::FastLeaderElection(QuorumPeer& self,
   : self_(self), log_(log), tm_(tm), epoch_(0)
 {
   timer_ = tm_.Alloc(this);
-  vote_.set_type(Message::VOTE);
-  vote_.mutable_vote()->set_from(id);
-  vote_.mutable_vote()->set_epoch(0);
+  vote_.set_from(id);
+  vote_.set_epoch(0);
 }
 
 void
 FastLeaderElection::LookForLeader()
 {
-  vote_.mutable_vote()->set_leader(vote_.vote().from());
-  vote_.mutable_vote()->set_zxid(log_.LastZxid());
-  vote_.mutable_vote()->set_epoch(vote_.vote().epoch() + 1);
-  vote_.mutable_vote()->set_status(Message::LOOKING);
+  vote_.set_leader(vote_.from());
+  vote_.set_zxid(log_.LastZxid());
+  vote_.set_epoch(vote_.epoch() + 1);
+  vote_.set_status(Vote::LOOKING);
   //should set a timeout
   SendVote();
   received_votes_.clear();
@@ -35,17 +33,17 @@ FastLeaderElection::LookForLeader()
 }
 
 void
-FastLeaderElection::Receive(const Message::Vote& v)
+FastLeaderElection::Receive(const Vote& v)
 {
-  if (vote_.vote().status() == Message::LOOKING) {
-    if (v.status() == Message::LOOKING) {
+  if (vote_.status() == Vote::LOOKING) {
+    if (v.status() == Vote::LOOKING) {
       //handle vote
-      if (v.epoch() < vote_.vote().epoch()) {
+      if (v.epoch() < vote_.epoch()) {
         //old vote, ignore it
         return;
-      } else if (v.epoch() > vote_.vote().epoch()) {
+      } else if (v.epoch() > vote_.epoch()) {
         //we are behind on the election
-        vote_.mutable_vote()->set_epoch(v.epoch());
+        vote_.set_epoch(v.epoch());
         UpdateVote(v);
         received_votes_.clear();
         SendVote();
@@ -60,14 +58,14 @@ FastLeaderElection::Receive(const Message::Vote& v)
       }
     } else {
       //vote came from someone not electing
-      if (v.epoch() == vote_.vote().epoch()) {
+      if (v.epoch() == vote_.epoch()) {
         received_votes_[v.from()] = Vote(v);
         //do we have a quorum and have they responded?
         if (HaveQuorum(v, received_votes_) &&
             received_votes_.count(v.leader())) {
-          vote_.mutable_vote()->set_leader(v.leader());
-          vote_.mutable_vote()->set_zxid(v.zxid());
-          Elect(vote_.vote().leader(), vote_.vote().zxid());
+          vote_.set_leader(v.leader());
+          vote_.set_zxid(v.zxid());
+          Elect(vote_.leader(), vote_.zxid());
           return;
         }
       }
@@ -76,13 +74,13 @@ FastLeaderElection::Receive(const Message::Vote& v)
       out_of_election_[v.from()] = Vote(v);
       if (HaveQuorum(v, out_of_election_) &&
           out_of_election_.count(v.leader())) {
-        vote_.mutable_vote()->set_leader(v.leader());
-        vote_.mutable_vote()->set_zxid(v.zxid());
-        Elect(vote_.vote().leader(), vote_.vote().zxid());
+        vote_.set_leader(v.leader());
+        vote_.set_zxid(v.zxid());
+        Elect(vote_.leader(), vote_.zxid());
         return;
       }
     }
-  } else if (v.status() == Message::LOOKING) {
+  } else if (v.status() == Vote::LOOKING) {
     //reply with our state
     self_.Send(v.from(), vote_);
   }
@@ -95,12 +93,12 @@ FastLeaderElection::SendVote()
 }
 
 bool
-FastLeaderElection::UpdateVote(const Message::Vote& v)
+FastLeaderElection::UpdateVote(const Vote& v)
 {
-  if (v.zxid() > vote_.vote().zxid() || (v.zxid() == vote_.vote().zxid() &&
-                                         v.leader() > vote_.vote().leader())) {
-    vote_.mutable_vote()->set_leader(v.leader());
-    vote_.mutable_vote()->set_zxid(v.zxid());
+  if (v.zxid() > vote_.zxid() || (v.zxid() == vote_.zxid() &&
+                                         v.leader() > vote_.leader())) {
+    vote_.set_leader(v.leader());
+    vote_.set_zxid(v.zxid());
     if (waiting_) {
       waiting_ = false;
       tm_.Disarm(timer_);
@@ -111,31 +109,30 @@ FastLeaderElection::UpdateVote(const Message::Vote& v)
 }
 
 void
-FastLeaderElection::AddVote(const Message::Vote& v)
+FastLeaderElection::AddVote(const Vote& v)
 {
   received_votes_[v.from()] = Vote(v);
-  if (HaveQuorum(Vote(vote_.vote()), received_votes_)) {
+  if (HaveQuorum(Vote(vote_), received_votes_)) {
     //set a timeout to listen for more votes
     if (!waiting_) {
       waiting_ = true;
       tm_.Arm(timer_, ELECT_TIMEOUT);
     }
-    // Elect(vote_.vote().leader(), vote_.vote().zxid());
   }
 }
 
 void
 FastLeaderElection::Callback() {
-  Elect(vote_.vote().leader(), vote_.vote().zxid());
+  Elect(vote_.leader(), vote_.zxid());
 }
 
 bool
-FastLeaderElection::HaveQuorum(const Vote& v,
-                               const std::map<std::string, Vote>& map)
+FastLeaderElection::HaveQuorum(const VoteWrapper& v,
+                               const std::map<std::string, VoteWrapper>& map)
 {
   uint32_t i = 1;
   uint32_t size = self_.QuorumSize();
-  for (std::map<std::string, Vote>::const_iterator it = map.begin();
+  for (std::map<std::string, VoteWrapper>::const_iterator it = map.begin();
        it != map.end();
        ++it) {
     if (v == it->second) {
@@ -150,10 +147,10 @@ FastLeaderElection::HaveQuorum(const Vote& v,
 void
 FastLeaderElection::Elect(const std::string& leader, uint64_t zxid)
 {
-  if (leader == vote_.vote().from()) {
-    vote_.mutable_vote()->set_status(Message::LEADING);
+  if (leader == vote_.from()) {
+    vote_.set_status(Vote::LEADING);
   } else {
-    vote_.mutable_vote()->set_status(Message::FOLLOWING);
+    vote_.set_status(Vote::FOLLOWING);
   }
   self_.Elected(leader, zxid);
 }

@@ -3,10 +3,9 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <set>
 #include <string>
-
-#include "Message.pb.h"
 
 class ZabCallback;
 

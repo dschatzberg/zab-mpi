@@ -5,7 +5,6 @@
 
 #include <map>
 
-#include "Message.pb.h"
 #include "Zab.hpp"
 
 class Log;
@@ -18,10 +17,11 @@ public:
   virtual void Callback();
   void Lead();
   uint64_t Propose(const std::string& message);
-  void Receive(const Message::FollowerInfo& fi);
-  void Receive(uint64_t zxid);
-  void ReceiveAckNewLeader(const Message& acks);
+  void Receive(const FollowerInfo& fi);
+  void Receive(const AckNewLeader& anl);
+  void Receive(const ProposalAck& pa);
 private:
+  void Ack(uint64_t zxid);
   QuorumPeer& self_;
   Log& log_;
   TimerManager& tm_;
@@ -30,9 +30,9 @@ private:
   bool leading_;
   uint32_t ack_count_;
   std::map<uint64_t, uint32_t> acks_;
-  Message message_;
-  Message propose_;
-  Message commit_;
+  NewLeaderInfo nli_;
+  Proposal p_;
+  Commit c_;
 };
 
 #endif

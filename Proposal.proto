@@ -1,0 +1,5 @@
+import "Entry.proto";
+
+message Proposal {
+  required Entry proposal = 1;
+}

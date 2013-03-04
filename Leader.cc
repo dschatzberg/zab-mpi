@@ -13,10 +13,7 @@ Leader::Leader(QuorumPeer& self, Log& log,
   : self_(self), log_(log), tm_(tm), recovering_(true), leading_(false)
 {
   recover_timer_ = tm_.Alloc(this);
-  message_.set_type(Message::NEWLEADERINFO);
-  message_.mutable_new_leader_info()->set_from(id);
-  propose_.set_type(Message::PROPOSAL);
-  commit_.set_type(Message::COMMIT);
+  nli_.set_from(id);
 }
 
 void
@@ -47,67 +44,75 @@ Leader::Propose(const std::string& message)
   zxid++;
   log_.Accept(zxid, message);
   acks_[zxid] = 0;
-  propose_.mutable_proposal()->set_zxid(zxid);
-  propose_.mutable_proposal()->set_message(message);
-  self_.Broadcast(propose_);
+  p_.mutable_proposal()->set_zxid(zxid);
+  p_.mutable_proposal()->set_message(message);
+  self_.Broadcast(p_);
 
   return zxid;
 }
 
 void
-Leader::Receive(const Message::FollowerInfo& fi)
+Leader::Receive(const FollowerInfo& fi)
 {
   if (leading_) {
-    message_.mutable_new_leader_info()->set_zxid(log_.LastZxid());
+    nli_.set_zxid(log_.LastZxid());
     uint64_t zxid = log_.CommittedZxid();
     if (fi.zxid() <= zxid) {
-      message_.mutable_new_leader_info()->set_type(Message::NewLeaderInfo::DIFF);
-      for(std::map<uint64_t, std::string>::const_iterator it = log_.Diff(fi.zxid());
+      nli_.set_type(NewLeaderInfo::DIFF);
+      for(std::map<uint64_t, std::string>::const_iterator it =
+            log_.Diff(fi.zxid());
           it != log_.EndCommit();
           ++it) {
-        Message::Entry* ep =
-          message_.mutable_new_leader_info()->add_commit_diff();
+        Entry* ep =
+          nli_.add_commit_diff();
         ep->set_zxid(it->first);
         ep->set_message(it->second);
       }
-      for (std::map<uint64_t, std::string>::const_iterator it = log_.Diff(zxid);
+      for (std::map<uint64_t, std::string>::const_iterator it =
+             log_.Diff(zxid);
            it != log_.End();
            ++it) {
-        Message::Entry* ep =
-          message_.mutable_new_leader_info()->add_propose_diff();
+        Entry* ep =
+          nli_.add_propose_diff();
         ep->set_zxid(it->first);
         ep->set_message(it->second);
       }
     } else {
       throw std::runtime_error("Unhandled recovery");
     }
-    self_.Send(fi.from(), message_);
+    self_.Send(fi.from(), nli_);
   }
 }
 
 void
-Leader::Receive(uint64_t zxid)
+Leader::Receive(const ProposalAck& pa)
 {
   if (leading_ && !recovering_) {
-    if (acks_.count(zxid)) {
-      ++acks_[zxid];
-      if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
-        acks_.erase(zxid);
-        commit_.set_commit_zxid(zxid);
-        self_.Broadcast(commit_);
-        log_.Commit(zxid);
-      }
+    Ack(pa.zxid());
+  }
+}
+
+void
+Leader::Ack(uint64_t zxid)
+{
+  if (acks_.count(zxid)) {
+    ++acks_[zxid];
+    if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
+      acks_.erase(zxid);
+      c_.set_zxid(zxid);
+      self_.Broadcast(c_);
+      log_.Commit(zxid);
     }
   }
 }
 
 void
-Leader::ReceiveAckNewLeader(const Message& acks)
+Leader::Receive(const AckNewLeader& anl)
 {
   if (leading_ && recovering_) {
     ack_count_++;
-    for (int i = 0; i < acks.ack_new_leader_zxids_size(); i++) {
-      Receive(acks.ack_new_leader_zxids(i));
+    for (int i = 0; i < anl.zxids_size(); i++) {
+      Ack(anl.zxids(i));
     }
     if ((ack_count_ + 1) >= (uint32_t)self_.QuorumSize()) {
       recovering_ = false;
