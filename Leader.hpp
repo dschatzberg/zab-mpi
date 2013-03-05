@@ -3,9 +3,13 @@
 
 #include <stdint.h>
 
-#include <map>
-
-#include "Zab.hpp"
+#include "Commit.pb.h"
+#include "AckNewLeader.pb.h"
+#include "FollowerInfo.pb.h"
+#include "NewLeaderInfo.pb.h"
+#include "Proposal.pb.h"
+#include "ProposalAck.pb.h"
+#include "TimerManager.hpp"
 
 class Log;
 class QuorumPeer;
@@ -19,7 +23,6 @@ public:
   uint64_t Propose(const std::string& message);
   void Receive(const FollowerInfo& fi);
   void Receive(const AckNewLeader& anl);
-  void Receive(const ProposalAck& pa);
 private:
   void Ack(uint64_t zxid);
   QuorumPeer& self_;
@@ -29,10 +32,10 @@ private:
   bool recovering_;
   bool leading_;
   uint32_t ack_count_;
-  std::map<uint64_t, uint32_t> acks_;
   NewLeaderInfo nli_;
   Proposal p_;
   Commit c_;
+  ProposalAck pa_;
 };
 
 #endif

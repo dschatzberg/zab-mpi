@@ -5,7 +5,8 @@
 
 #include <map>
 
-#include "Zab.hpp"
+#include "TimerManager.hpp"
+#include "Vote.pb.h"
 
 class ReliableFifoCommunicator;
 class QuorumPeer;

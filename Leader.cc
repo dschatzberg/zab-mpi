@@ -23,13 +23,6 @@ Leader::Lead()
   recovering_ = true;
   tm_.Arm(recover_timer_, RECOVER_CYCLES);
   ack_count_ = 0;
-  acks_.clear();
-  for (std::map<uint64_t, std::string>::const_iterator it =
-         log_.Diff(log_.CommittedZxid());
-       it != log_.End();
-       it++) {
-    acks_[it->first] = 0;
-  }
   log_.NewEpoch();
 }
 
@@ -43,11 +36,11 @@ Leader::Propose(const std::string& message)
   uint64_t zxid = log_.LastZxid();
   zxid++;
   log_.Accept(zxid, message);
-  acks_[zxid] = 0;
   p_.mutable_proposal()->set_zxid(zxid);
   p_.mutable_proposal()->set_message(message);
   self_.Broadcast(p_);
-
+  pa_.set_zxid(zxid);
+  self_.Broadcast(pa_);
   return zxid;
 }
 
@@ -84,37 +77,27 @@ Leader::Receive(const FollowerInfo& fi)
   }
 }
 
-void
-Leader::Receive(const ProposalAck& pa)
-{
-  if (leading_ && !recovering_) {
-    Ack(pa.zxid());
-  }
-}
-
-void
-Leader::Ack(uint64_t zxid)
-{
-  if (acks_.count(zxid)) {
-    ++acks_[zxid];
-    if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
-      acks_.erase(zxid);
-      c_.set_zxid(zxid);
-      self_.Broadcast(c_);
-      log_.Commit(zxid);
-    }
-  }
-}
+// void
+// Leader::Ack(uint64_t zxid)
+// {
+//   if (acks_.count(zxid)) {
+//     ++acks_[zxid];
+//     if ((acks_[zxid] + 1) >= (uint32_t)self_.QuorumSize()) {
+//       acks_.erase(zxid);
+//       c_.set_zxid(zxid);
+//       self_.Broadcast(c_);
+//       log_.Commit(zxid);
+//     }
+//   }
+// }
 
 void
 Leader::Receive(const AckNewLeader& anl)
 {
   if (leading_ && recovering_) {
     ack_count_++;
-    for (int i = 0; i < anl.zxids_size(); i++) {
-      Ack(anl.zxids(i));
-    }
     if ((ack_count_ + 1) >= (uint32_t)self_.QuorumSize()) {
+      //FIXME: Commit all outstanding proposals
       recovering_ = false;
       tm_.Disarm(recover_timer_);
       self_.Ready();

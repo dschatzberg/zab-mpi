@@ -1,5 +1,6 @@
 SRCFILES := \
 	AckNewLeader.pb.cc \
+	BGCommunicator.cc \
 	Commit.pb.cc \
 	Entry.pb.cc \
 	FastLeaderElection.cc \
@@ -11,9 +12,10 @@ SRCFILES := \
 	ProposalAck.pb.cc \
 	Proposal.pb.cc \
 	Vote.pb.cc \
-	ZabImpl.cc
+	Zab.cc
 HDRFILES := \
 	AckNewLeader.pb.h \
+	BGCommunicator.hpp \
 	Commit.pb.h \
 	Entry.pb.h \
 	FastLeaderElection.hpp \
@@ -25,12 +27,11 @@ HDRFILES := \
 	ProposalAck.pb.h \
 	Proposal.pb.h \
 	Vote.pb.h \
-	Zab.hpp \
-	ZabImpl.hpp
+	Zab.hpp
 
 OBJFILES :=  $(patsubst %.cc,%.o,$(SRCFILES))
 
-DEPFILES := $(patsubst %.cc, %.d, $(SRCFILES))
+DEPFILES := $(patsubst %.cc, %.d, $(SRCFILES)) bgtest.d test.d
 
 .PHONY: all clean
 
@@ -50,7 +51,7 @@ bgtest: $(HDRFILES) $(OBJFILES) bgtest.o
 	$(CXX) $(CXXFLAGS) $(BGLDFLAGS) $(OBJFILES) bgtest.o $(BGLIBS) -o $@
 
 clean:
-	-$(RM) $(wildcard $(OBJFILES) $(DEPFILES) test \
+	-$(RM) $(wildcard $(OBJFILES) $(DEPFILES) test test.o bgtest bgtest.o \
 	$(filter %.pb.cc, $(SRCFILES)) $(filter %.pb.h, $(HDRFILES)))
 
 -include $(DEPFILES)
